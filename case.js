@@ -73,6 +73,22 @@ const repairShapes = [
 const suppliedLines = STARTER.trimEnd().split('\n');
 export const repairReminder = 'Fix the line that is already here. You can change its pieces or spaces. Extra instructions won’t be added.';
 
+// Keep the student's exact spelling and spacing when every supplied line is identifiable.
+export function withoutExtraLines(text, first, count) {
+  const lines = text.split('\n');
+  if (lines.length <= count) return null;
+  const rows = repairShapes.slice(first, first + count).map(shape =>
+    lines.flatMap((line, row) => shape.test(line) ? [row] : [])
+  );
+  // The two inputs share a shape. Identify each by its variable name.
+  if (first === 0) {
+    rows[0] = rows[0].filter(row => /^\s*price\s*=/.test(lines[row]));
+    rows[1] = rows[1].filter(row => /^\s*quantity\s*=/.test(lines[row]));
+  }
+  if (rows.some((matches, i) => matches.length !== 1 || (i && matches[0] <= rows[i - 1][0]))) return null;
+  return rows.map(([row]) => lines[row]).join('\n');
+}
+
 export function allowsRepair(before, after) {
   if (before === after) return true;
   const oldLines = before.split('\n');

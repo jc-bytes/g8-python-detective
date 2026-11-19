@@ -2,8 +2,8 @@ import { sentenceReminder, setupAnswerField } from './answer-field.js';
 import { playSound } from './sound.js';
 import { ruleTopics, chapterIndex } from './rule-book.js';
 import { speak, finishSpeech } from './speech.js';
-import { TESTS, EXPLANATIONS, repairQuestions, repairLines, repairRow } from './case.js';
-import { stationRange } from './shop-tasks.js';
+import { TESTS, EXPLANATIONS, repairReminder, withoutExtraLines, repairQuestions, repairLines, repairRow } from './case.js';
+import { stationRange, tasks } from './shop-tasks.js';
 import { keptRun, recordRun } from './model.js';
 
 const stations = {
@@ -134,6 +134,15 @@ const clueGoals = {
   name: [5, 'Check the ledger', 'Where does the receipt get its total?'],
   operator: [6, 'Check the calculator', 'Compare the printed total with the order.'],
 };
+function stationLineLimit(station) {
+  return station === 'bracket' ? 1 : tasks.find(task => task.id === station)?.count;
+}
+function oversizedStation(attempt) {
+  return Object.keys(stations).find(station => {
+    const range = stationRange(attempt, station);
+    return range && attempt.source.slice(...range).split('\n').length > stationLineLimit(station);
+  });
+}
 export function investigationGoal(attempt, current, customer, question) {
   const initial = [1, 'Check what the printer shows', 'Enter 6 for Price and 3 for Quantity. Select Run order.'];
   const run = attempt.runs.at(-1);
@@ -143,6 +152,8 @@ export function investigationGoal(attempt, current, customer, question) {
   if (repair && needsRepairReply(attempt, repair)) {
     return [clueGoals[repair][0], `Explain the ${stations[repair].toLowerCase()} repair`, 'Tell the owner why your change worked.'];
   }
+  const oversized = oversizedStation(attempt);
+  if (oversized) return [clueGoals[oversized][0], `Check the ${stations[oversized].toLowerCase()}`, 'Remove the extra lines in your saved code.'];
   if (current && target === 'name' && run.error.includes('NameError')) {
     if (run.nameComparison === 'calculator') return [5, 'Read the calculator', 'Find the name to the left of the equals sign.'];
     if (run.nameComparison === 'ledger') return [5, 'Compare the names', 'Check the spelling in the ledger.'];
@@ -189,6 +200,8 @@ export function requiredStation(attempt, current, customer, question) {
   const [target] = judge(run, run.price, run.quantity);
   const repair = current && confirmedRepair(attempt, current, target);
   if (repair && needsRepairReply(attempt, repair)) return repair;
+  const oversized = oversizedStation(attempt);
+  if (oversized) return oversized;
   if (target === 'name' && run.nameComparison === 'calculator') return 'operator';
   if (target === 'ok') return customer || question ? 'bracket' : null;
   if (target) return target;
@@ -274,20 +287,58 @@ export function openOrder(
   }
   function clear() {
     pointTo(null);
+    editor.readOnly = !range;
+    updateCleanup();
     form.hidden = false;
     result.replaceChildren();
     next.hidden = true;
     reply.hidden = true;
     speak(dialogue, entryPrompt());
   }
+  const lineLimit = stationLineLimit(station);
+  const tooManyLines = value => lineLimit && value.split('\n').length > lineLimit;
+  const oldLinesMessage = `This machine uses ${lineLimit} ${lineLimit === 1 ? 'line' : 'lines'}. Delete the extra lines in your saved code before you run it.`;
+  if (tooManyLines(editor.value)) id('repair-limit').textContent = oldLinesMessage;
+  editor.onbeforeinput = event => {
+    if (lineLimit && ['insertLineBreak', 'insertParagraph'].includes(event.inputType)) {
+      event.preventDefault();
+      id('repair-limit').textContent = repairReminder;
+    }
+  };
   editor.oninput = () => {
     const source = attempt.source.slice(0, start) + editor.value + attempt.source.slice(end);
     if (!range) return;
+    if (tooManyLines(editor.value)) {
+      const previous = attempt.source.slice(start, end);
+      if (editor.value.split('\n').length >= previous.split('\n').length) {
+        editor.value = previous;
+        id('repair-limit').textContent = tooManyLines(previous) ? oldLinesMessage : repairReminder;
+        return;
+      }
+    }
     if (edit(source, station ? {station, range: [start, start + editor.value.length]} : null)) {
       end = start + editor.value.length;
       clear();
     } else editor.value = attempt.source.slice(start, end);
   };
+  let updateCleanup = () => {};
+  if (tooManyLines(editor.value)) {
+    const first = station === 'bracket' ? 6 : tasks.find(task => task.id === station).first;
+    const cleanup = document.createElement('button');
+    cleanup.type = 'button';
+    cleanup.textContent = 'Remove extra lines';
+    cleanup.hidden = withoutExtraLines(editor.value, first, lineLimit) === null;
+    id('repair-limit').after(cleanup);
+    cleanup.onclick = () => {
+      if (editor.readOnly || editor.disabled || !canEdit()) return;
+      const cleaned = withoutExtraLines(editor.value, first, lineLimit);
+      if (cleaned === null) return;
+      editor.value = cleaned;
+      editor.oninput();
+      editor.focus();
+    };
+    updateCleanup = () => { cleanup.hidden = editor.readOnly || withoutExtraLines(editor.value, first, lineLimit) === null; };
+  }
   function insert(token) {
     if (editor.disabled || editor.readOnly || !canEdit()) return;
     editor.setRangeText(token, editor.selectionStart, editor.selectionEnd, 'end');
@@ -343,17 +394,13 @@ export function openOrder(
       block.append(h, pre);
       result.append(block);
     }
-    output('Printed receipt', record.printed || 'No receipt printed.');
-    if (record.error) {
-      const trace = record.error.trim();
-      const position = trace.lastIndexOf('File "student_order.py"');
-      const diagnostic = position < 0 ? trace.split('\n').at(-1) : trace.slice(position);
-      output('Python error', studentDiagnostic(diagnostic)); 
-    }
-    if (record.stderr) output('Python messages', record.stderr);
     const [target, message] = judge(record, record.price, record.quantity);
     const repair = confirmedRepair(attempt, record, target);
     if (repair && needsRepairReply(attempt, repair) && (!station || station === repair)) {
+      editor.readOnly = true;
+      updateCleanup();
+      form.hidden = true;
+      if (target === 'ok') output('Printed receipt', record.printed);
       const context = `Yes! You fixed this line. ${repairProgress[repair]} `;
       if (repair === 'conversion') ask(EXPLANATIONS.find(item => item.id === repair), record, context);
       else {
@@ -367,6 +414,18 @@ export function openOrder(
       }
       return;
     }
+    if (tooManyLines(editor.value)) {
+      speak(dialogue, oldLinesMessage);
+      return;
+    }
+    output('Printed receipt', record.printed || 'No receipt printed.');
+    if (record.error) {
+      const trace = record.error.trim();
+      const position = trace.lastIndexOf('File "student_order.py"');
+      const diagnostic = position < 0 ? trace.split('\n').at(-1) : trace.slice(position);
+      output('Python error', studentDiagnostic(diagnostic));
+    }
+    if (record.stderr) output('Python messages', record.stderr);
     if (target === 'name' && record.error.includes('NameError')) {
       function guide(destination, prompt) {
         speak(dialogue, prompt);
@@ -477,10 +536,16 @@ export function openOrder(
         field.focus();
         return;
       }
+      const [target] = judge(record, record.price, record.quantity);
+      const repair = confirmedRepair(attempt, record, target);
+      const pending = repair && needsRepairReply(attempt, repair);
       onReply(field.value.trim());
       save();
       refresh();
       show(record);
+      if (pending && !needsRepairReply(attempt, repair) && target !== 'ok' && !tooManyLines(editor.value)) {
+        speak(dialogue, `Oh no, there’s another ${record.error ? 'error' : 'problem with the receipt'}! Let’s fix it. ${dialogue.textContent}`);
+      }
       if (!reply.hidden) field.focus(); else next.focus();
     });
   }
@@ -490,6 +555,11 @@ export function openOrder(
   else if (!returnToPrinter(nextCustomer)) speak(dialogue, entryPrompt());
   form.onsubmit = async (e) => {
     e.preventDefault();
+    if (tooManyLines(editor.value)) {
+      id('repair-limit').textContent = oldLinesMessage;
+      editor.focus();
+      return;
+    }
     if (!canEdit() || returnToPrinter(nextOrder(attempt))) return;
     const { price, quantity } = attempt.order,
       source = attempt.source,

@@ -225,7 +225,8 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
       choice('I’m lost',()=>{
         let clue='We know what happened to me this morning. We haven’t seen what happens when you try it yet.';
         if(a.runs.length)clue='Try the order with your current code and entries. What comes out this time?';
-        if(last){const [result,feedback]=judge(last,last.price,last.quantity);clue=feedback;
+        if(last && taskTitle.startsWith('Explain the '))clue=taskHint;
+        else if(last){const [result,feedback]=judge(last,last.price,last.quantity);clue=feedback;
           if(result==='ok'){const test=nextOrder(a);clue=test?`That receipt matches. Another customer wants ${test.quantity} items at ${test.price} each.`:pendingQuestion(a) ? 'Your receipts are ready. Continue the order to tell me what you found.' : 'Your receipts and replies are saved. You can review them in your case folder.';}
         }
         show('menu',clue);
