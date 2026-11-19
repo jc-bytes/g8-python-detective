@@ -1,0 +1,60 @@
+export const CASE_VERSION = 'broken-order-1';
+export const LEGACY_STARTER = 'price = int(input("Price: "))\nquantity = input("Quantity: ")\ntotal = price + quantity\nprint("Total:", totl)\nif total > 0:\nprint("Order recorded")\nprint("Debug check complete"\n';
+export const SIMPLIFIED_STARTER = 'price = int(input("Price: "))\nquantity = int(input("Quantity: "))\ntotal = price + quantity\n("Total:", total)\nif total > 0:\n    print("Order recorded")\n("Debug check complete")\n';
+
+export const STARTER = LEGACY_STARTER;
+
+export const PRINTER_QUESTION = 'That’s the last line my receipts were missing! What did you change to make it print?';
+
+export const RULES = [
+  'Ask for a price and a quantity.',
+  'Treat both answers as whole numbers.',
+  'Multiply price by quantity to calculate the total.',
+  'Always display the total.',
+  'Display Order recorded only when total > 0.',
+  'Finish by displaying Debug check complete.'
+];
+
+export const CASES = [
+  { id: 'bracket', title: 'Printer archive', object: 'Printer strip', tag: 'A', evidence: 'This is the original program recovered from the shop printer. It has not been repaired.', program: true },
+  { id: 'name', title: 'Shop ledger', object: 'Storage drawer', tag: 'B', evidence: 'The ledger needs a price, a quantity, and a total for each order. The final printed total must match the calculated total.' },
+  { id: 'conversion', title: 'Customer entry log', object: 'Input terminal', tag: 'C', evidence: 'Customer entries from three orders:\nPrice: 6   Quantity: 3\nPrice: 4   Quantity: 0\nPrice: 5   Quantity: 2\nThese are the entries customers typed, not program results.' },
+  { id: 'operator', title: 'Counter receipt', object: 'Calculator and receipt', tag: 'D', evidence: 'A handwritten receipt lists 3 items at a price of 6 each. The customer paid 18. This receipt was written separately from the broken program.' },
+  { id: 'indent', title: 'Shop notice', object: 'Order notice', tag: 'E', evidence: 'Display the total for every order. Display Order recorded only for a positive total. Finish every order by displaying Debug check complete.' }
+];
+
+export const TOOLBOX = ['(', ')', '[', ']', ':', ',', '"', '+', '-', '*', '/', '=', '==', '>', '<', 'int', 'str', 'input', 'print', 'price', 'quantity', 'total', '    '];
+
+export const repairQuestions = {
+  indent: 'Why did you move the print line under the if?',
+  bracket: 'What did your change tell Python about where the print call ends?',
+  name: 'Why does the name in the print line need to match the name used for the total?',
+  operator: 'Why does your calculation give the right price for the whole order?',
+};
+
+export const EXPLANATIONS = [
+  { id: 'conversion', title: 'Inputs and calculation', questions: ['When the customer typed 3, what did input() give the till?', 'Why did the quantity need to be a number for the calculation?'] },
+  { id: 'indent', title: 'The zero order', questions: ['What total printed for the empty order?', 'Which messages appeared below that total?', 'Why did the if condition skip “Order recorded”?'] }
+];
+
+export const TESTS = [
+  { id: 'order-1', price: '6', quantity: '3' },
+  { id: 'order-2', price: '4', quantity: '0' },
+  { id: 'order-3', price: '5', quantity: '2' }
+];
+
+export const PRACTICE_SOURCE = 'print("The shop is quiet")\n';
+
+// Identify the student's own lines after insertions or comments move them.
+export const repairLines = [
+  {id:'bracket', label:'Missing parenthesis', pattern:/Debug check complete/},
+  {id:'conversion', label:'Quantity conversion', pattern:/^\s*quantity\s*=/},
+  {id:'operator', label:'Total calculation', pattern:/^\s*total\s*=/},
+  {id:'name', label:'Printed total', pattern:/["']Total:/},
+  {id:'indent', label:'Order notice indentation', pattern:/Order recorded/}
+];
+export function repairRow(source, repair){
+  const lines=source.split('\n');
+  const rows=lines.flatMap((line,index)=>!line.trimStart().startsWith('#') && repair.pattern.test(line)?[index]:[]);
+  return rows.length===1?rows[0]:null;
+}

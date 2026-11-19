@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142e35">
+  <meta name="description" content="Investigate five bugs, move evidence, and repair a real Python order program.">
+  <title>Python Detective · The Broken Order</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./printer.css">
+  <script defer src="./vendor/pdfmake.js"></script>
+  <script defer src="./vendor/pdf-fonts.js"></script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main id="game">
+    <section id="arrival" aria-labelledby="game-title">
+      <form id="identity-form">
+        <p class="eyebrow">Python Detective · Case 001</p>
+        <h1 id="game-title">The Broken Order</h1>
+        <p>What name should the shop owner call you?</p>
+        <label>First name<input id="first-name" maxlength="100" autocomplete="given-name" required></label>
+        <div class="arrival-fields">
+          <label>Last name<input id="last-name" maxlength="100" autocomplete="family-name"></label>
+          <label>Class<select id="group" aria-label="Class"><option value="">Choose class</option><option>8A</option><option>8B</option></select></label>
+        </div>
+        <fieldset id="detective-choices"><legend>Choose your detective</legend>
+          <label><input type="radio" name="character" value="girl"><canvas width="36" height="60" aria-hidden="true"></canvas>Girl</label>
+          <label><input type="radio" name="character" value="boy" checked><canvas width="36" height="60" aria-hidden="true"></canvas>Boy</label>
+        </fieldset>
+        <button class="primary" id="enter-shop">Enter the shop</button>
+      </form>
+    </section>
+    <button id="game-menu" aria-haspopup="dialog"><span aria-hidden="true">☰</span> Menu</button>
+    <div id="conflict" class="warning" hidden>Another tab saved this case. Editing is paused so neither attempt is silently overwritten. <button id="load-other">Back up this work and load the saved attempt</button></div>
+    <div id="damaged-save" class="warning" hidden>The saved case on this browser could not be read. It has not been overwritten. You can restore a valid backup below, or <button id="recover-damaged">Download the damaged save and start again</button>.</div>
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+    <section hidden id="shop-scene" aria-label="Shop counter investigation"></section>
+    <section id="existing-case" hidden><button id="back-shop">← Shop counter</button>
+    <div class="workspace">
+      <section class="investigation" aria-label="Shop investigation room">
+        <div class="room" id="room">
+          <div class="room-label" aria-hidden="true">NIGHT SHIFT / ORDER REPAIR DESK</div>
+          <div class="window" aria-hidden="true"><div class="moon"></div><div class="building building-one"></div><div class="building building-two"></div><div class="window-cross"></div></div>
+          <div class="shelf" aria-hidden="true"></div><div class="desk-surface" aria-hidden="true"></div>
+          <button class="station station-bracket" data-station="bracket" aria-label="Inspect printer archive">
+            <span class="number-pin">A</span><span class="printer-art" aria-hidden="true"><span class="receipt-art">SHOP SYSTEM<br>ORIGINAL CODE<br><b>ARCHIVE</b><i></i></span><span class="printer-body"><span></span></span></span><span class="object-label">Printer archive<small>Inspect printer strip</small></span>
+          </button>
+          <button class="station station-name" data-station="name" aria-label="Inspect shop ledger">
+            <span class="number-pin">B</span><span class="drawer-art" aria-hidden="true"><span class="drawer-back"></span><span class="drawer-front"><b>ORDERS</b><i></i></span><span class="loose-label">LEDGER</span></span><span class="object-label">Shop ledger<small>Inspect storage drawer</small></span>
+          </button>
+          <button class="station station-conversion" data-station="conversion" aria-label="Inspect customer entry log">
+            <span class="number-pin">C</span><span class="terminal-art" aria-hidden="true"><span>CUSTOMER LOG<br><b>6 / 3</b><small>ORDER ENTRIES</small></span><i></i></span><span class="object-label">Customer entry log<small>Inspect input terminal</small></span>
+          </button>
+          <button class="station station-operator" data-station="operator" aria-label="Inspect counter receipt">
+            <span class="number-pin">D</span><span class="calculator-art" aria-hidden="true"><span class="calc-screen">18</span><span class="calc-keys">+ − ×<br>7 8 9<br>4 5 6</span></span><span class="receipt-small" aria-hidden="true">SHOP ORDER<br>3 ITEMS<br>PRICE 6<br>PAID 18</span><span class="object-label">Counter receipt<small>Inspect calculator</small></span>
+          </button>
+          <button class="station station-indent" data-station="indent" aria-label="Inspect shop notice">
+            <span class="number-pin">E</span><span class="notice-art" aria-hidden="true"><span class="tape"></span><b>SHOP NOTICE</b><span>Check every order<br>Follow the<br><strong>shop rules</strong></span></span><span class="object-label">Shop notice<small>Inspect order notice</small></span>
+          </button>
+          <button class="repair-desk" id="desk-open" aria-label="Open the repair desk to edit Python and test orders"><span class="monitor"><span class="monitor-bar">ORDER SYSTEM <i></i></span><span class="monitor-code">price = int(input(…))<br>quantity = int(input(…))<br>total = price + quantity<br><span class="cursor">▌</span></span><span class="monitor-cta">OPEN REPAIR DESK <span>↗</span></span></span><span class="monitor-foot" aria-hidden="true"></span><span class="keyboard-art" aria-hidden="true"></span></button>
+          <div class="scene-caption">Everything you need is in this room.<br>Choose any case to begin.</div>
+        </div>
+        <section class="evidence-board" aria-labelledby="board-title"><div class="section-line"><div><p class="eyebrow">Collect → Connect → Repair</p><h2 id="board-title">Your evidence board</h2></div><span id="evidence-count" class="badge">0 / 5 cards attached</span></div><p class="board-instruction">Use this optional board to organise your thinking. Drag a collected card to any investigation, or select the card and then a slot. <span id="suspicion-hint">If you add a note, explain in a complete sentence why you suspect that line.</span> There is no matching answer key. The board is not graded.</p><div id="clue-tray" class="clue-tray" role="group" aria-label="Collected clue cards"></div><div id="board-slots" class="board-slots"></div><p id="board-message" class="small" aria-live="polite">No evidence collected yet. Inspect an object in the room.</p></section>
+      </section>
+      <aside class="notebook" aria-label="Investigation notebook">
+        <div class="notebook-heading"><p class="eyebrow">Investigator's notebook</p><h2>Follow the evidence.</h2></div>
+        <nav id="case-list" aria-label="Cases"></nav>
+        <section class="rules"><h3>The shop's rules</h3><ol id="rules-list"></ol></section>
+        <button class="info-card" data-info="reference"><span aria-hidden="true">ⓘ</span> Your allowed resources</button><template id="reference"><p>You may use your saved PythonTotal and PythonDebugPractice records. Use the shop rules to decide what the program should do. Run Python to collect actual output and error messages.</p><p>The room does not identify the five repairs for you. Investigate in any order. One error may hide another until you repair it.</p></template>
+        <button id="submit-open" class="primary full">Review and download files <span>↗</span></button>
+        <p class="small">Submit your Python program and PDF case report in Google Classroom. The game does not upload them.</p>
+        <button class="info-card" data-info="assessment-rules"><span aria-hidden="true">ⓘ</span> Assessment and adjustments</button><template id="assessment-rules"><p>Work independently. Keep the same five code repairs, three tests, and two explanations. Moving quickly, viewing clues, and optional notes do not earn or lose marks.</p><p>Speak English when asking questions, discussing your work, and responding. Your teacher applies the existing spoken-English rule within the zero-case criterion. Silence is not a failure to speak English. Approved language adjustments apply.</p><p>Responsibility checks are submitting by the agreed deadline, being ready, and following instructions respectfully. School equipment, account, or technology failures are not penalized.</p></template>
+      </aside>
+    </div>
+    </section>
+    <section id="practice-panel" class="practice-panel" hidden><p class="eyebrow">Ungraded controls rehearsal</p><h2>Change a practice sign</h2><p>This practice is separate from your assessed case. Select the word open, then place it on the sign. Run the program and keep its result. Try downloading a practice report.</p><div class="practice-tools"><button id="practice-piece" class="piece" draggable="true">open</button><button id="practice-target" class="code-target">Replace quiet on the sign</button></div><label for="practice-code">Practice program</label><textarea id="practice-code" spellcheck="false" class="code-editor" rows="3"></textarea><div class="button-row"><button id="practice-run" class="primary">Run practice</button><button id="practice-stop">Stop run</button><button id="practice-keep">Keep practice result</button><button id="practice-export">Download practice files</button></div><pre id="practice-output" class="output">Not run</pre><p id="practice-feedback" aria-live="polite"></p><button id="assessment-mode" class="primary">Return to my assessment</button></section>
+  </main>
+  <dialog id="settings" class="kit-window" aria-labelledby="settings-title">
+    <header class="menu-cover"><div><h2 id="settings-title">Detective’s desk</h2><p id="mode-label"></p></div><button id="menu-close" aria-label="Close game menu">✕</button></header>
+    <div class="menu-pages">
+      <section aria-labelledby="menu-investigation"><h3 id="menu-investigation">Investigation</h3>
+        <div class="menu-routes">
+          <button id="menu-export"><span>Open case folder</span><small>Read the report and download the till code</small></button>
+          <button id="other-objects">Case materials</button><button id="help-open">How to investigate</button>
+          <button id="edit-identity">Detective details</button><button id="practice-mode">Practice the controls</button>
+        </div>
+      </section>
+      <section class="menu-storage" aria-labelledby="menu-storage-title"><h3 id="menu-storage-title">Saved work</h3>
+        <p id="save-status" role="status"></p><p id="offline-status"></p>
+        <div class="backup-actions"><button id="backup">Download backup</button><label class="file-button">Restore backup<input type="file" id="restore" accept=".json,application/json"></label></div>
+      </section>
+      <footer><button id="clear-data">Clear this device's work</button></footer>
+    </div>
+  </dialog>
+  <dialog id="work-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><div><p id="dialog-eyebrow" class="eyebrow"></p><h2 id="dialog-title"></h2></div><button id="dialog-close" class="close-button" aria-label="Close investigation panel">✕</button></div><div id="dialog-body"></div></dialog>
+  <noscript><p class="warning">This activity needs JavaScript. Ask your teacher for the existing IDLE starter and Word response sheet.</p></noscript>
+</body>
+</html>
