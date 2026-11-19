@@ -26,15 +26,15 @@ export const CASES = [
 export const TOOLBOX = ['(', ')', '[', ']', ':', ',', '"', '+', '-', '*', '/', '=', '==', '>', '<', 'int', 'str', 'input', 'print', 'price', 'quantity', 'total', '    '];
 
 export const repairQuestions = {
-  indent: 'Why did you move the print line under the if?',
-  bracket: 'What did your change tell Python about where the print call ends?',
+  indent: 'How does Python know when to print the order notice?',
+  bracket: 'How does Python know where the printer’s instruction ends?',
   name: 'Why does the name in the print line need to match the name used for the total?',
   operator: 'Why does your calculation give the right price for the whole order?',
 };
 
 export const EXPLANATIONS = [
   { id: 'conversion', title: 'Inputs and calculation', questions: ['When the customer typed 3, what did input() give the till?', 'Why did the quantity need to be a number for the calculation?'] },
-  { id: 'indent', title: 'The zero order', questions: ['What total printed for the empty order?', 'Which messages appeared below that total?', 'Why did the if condition skip “Order recorded”?'] }
+  { id: 'indent', title: 'The zero order', questions: ['What total printed for the empty order?', 'Which messages appeared below that total?', 'Compare this receipt with the one for two items. Which message is missing, and why did the final message still print?'] }
 ];
 
 export const TESTS = [

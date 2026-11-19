@@ -431,3 +431,11 @@ dialog.bound-book {
 .file-exhibit h5 {margin:0 0 6px;font:bold 17px Georgia,serif;color:#244c42}
 .file-exhibit pre {margin:4px 0 8px}
 @media(max-width:520px){.file-exhibit {grid-template-columns:minmax(0,1fr);gap:10px}.file-exhibit img {width:138px;max-width:100%}}
+
+.file-answer {margin:8px 0;padding:10px 14px;background:#edf3ed;border-left:3px solid #426757}
+.case-report .file-answer strong {display:block;margin:0 0 6px}
+.file-answer b {color:#24564b;font-size:.85em}
+.case-paper .file-answer p {white-space:pre-wrap;margin:3px 0 0}
+
+.answer-feedback:not(:empty) {display:block;margin:.35rem 0;font-weight:600;line-height:1.35}
+.answer-feedback:empty {display:none}

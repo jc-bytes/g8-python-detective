@@ -1,3 +1,5 @@
+import { setupAnswerField } from './answer-field.js';
+import { playSound, setupSoundToggle } from './sound.js';
 import { paint } from './shop-art.js';
 import { currentOrderRun, judge, stationHint, studentDiagnostic } from './task-scene.js';
 import { setupPrinter } from './printer-scene.js';
@@ -7,6 +9,7 @@ import { PythonRunner } from './runtime.js';
 import { exhibitPrint, downloadBlob, filingDate, caseDisposition, reportSections, submissionFiles } from './export.js';
 
 const byId = id => document.getElementById(id);
+setupSoundToggle(byId('sound-toggle'));
 const dialog = byId('work-dialog');
 const dialogBody = byId('dialog-body');
 const storageKey = mode => `python-detective:${CASE_VERSION}:${mode}`;
@@ -135,6 +138,7 @@ byId('identity-form').onsubmit = event => {
   const first = byId('first-name');
   if (!first.value.trim()) { first.setCustomValidity('Enter your first name.'); first.reportValidity(); return; }
   attempt.identity.firstName = first.value.trim();
+  playSound('door_open_1');
   entered = true;
   save(); refresh(); printer.walkToCounter();
 };
@@ -249,7 +253,10 @@ function refresh() {
     reason.addEventListener('input', storeConnection);
     lineLabel.append(line);
     reasonLabel.append(reason);
-    investigation.append(lineLabel, reasonLabel);
+    const feedback = document.createElement('small');
+    feedback.id = `reason-feedback-${station.id}`;
+    setupAnswerField(reason, feedback);
+    investigation.append(lineLabel, reasonLabel, feedback);
     board.append(investigation);
   }
   const count = Object.keys(attempt.evidence).length;
@@ -393,7 +400,10 @@ function openDesk(opener) {
       save();
     });
     label.append(field);
-    byId('explanations').append(label);
+    const feedback = document.createElement('small');
+    feedback.id = `explanation-feedback-${explanation.id}`;
+    setupAnswerField(field, feedback);
+    byId('explanations').append(label, feedback);
   }
   for (const test of TESTS) {
     const button = document.createElement('button');
@@ -506,7 +516,7 @@ function openSubmission(opener) {
   byId('case-status').textContent = caseDisposition(attempt);
   byId('report-edit').onclick = () => openDesk(opener);
   for (const {title, entries} of reportSections(attempt)) {
-    const lead = title === 'Statement of the store owner' || title === 'Detective’s findings';
+    const lead = title === 'Statement of the store owner' || title === 'Detective’s findings' || title === 'Student answers';
     const section = document.createElement(lead ? 'section' : 'details');
     const summary = document.createElement(lead ? 'h4' : 'summary');
     if (title.startsWith('Exhibit 01')) section.open = true;
@@ -538,6 +548,22 @@ function openSubmission(opener) {
         }
         figure.append(image,caption);
         section.append(figure);
+        continue;
+      }
+      if (kind === 'answer') {
+        const card = document.createElement('div');
+        card.className = 'file-answer';
+        if (exhibit.prompt) {
+          const prompt = document.createElement('strong');
+          prompt.textContent = exhibit.prompt;
+          card.append(prompt);
+        }
+        const author = document.createElement('b');
+        author.textContent = exhibit.author;
+        const written = document.createElement('p');
+        written.textContent = value;
+        card.append(author, written);
+        section.append(card);
         continue;
       }
       const line = document.createElement(kind === 'code' ? 'pre' : kind === 'label' ? 'strong' : kind === 'quote' ? 'blockquote' : 'p');

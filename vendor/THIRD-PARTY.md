@@ -19,3 +19,11 @@ The Python runtime executes student-authored code locally. This is not a hardene
 PDF reports use pdfmake 0.2.20 with its bundled Roboto fonts and DejaVu Sans Mono and DejaVu Serif. The library and DejaVu licenses are packaged locally.
 
 The case folder’s PDF preview renders the filed PDF with PDF.js 4.10.38. The reader, worker, and Apache license ship in this folder.
+
+## Sound effects
+
+Kenney’s RPG Audio pack is distributed under CC0 1.0 Universal. The shop uses seven clips converted to mono 24 kHz WAV. The license is bundled in `audio/LICENSE`.
+
+Original pack: https://kenney.nl/assets/rpg-audio
+
+Asset source: https://github.com/Boyquotes/kenney-rpg-audio-for-godot/tree/22eb79bb843bbcadcaa6ed119353a33265ffad11

@@ -26,7 +26,9 @@ export function restoreTasks(saved,source,starter=STARTER){
     const questionCount = EXPLANATIONS.find(item => item.id === task.id)?.questions.length || 0;
     const replies = Array.isArray(old?.replies) ? old.replies.slice(0, Math.max(0, questionCount - 1)) : [];
     const validReplies = replies.every(text => typeof text === 'string' && text.trim() && text.length <= 3000);
-    return [task.id,{range,proof,records,replies:validReplies ? replies : [],last:Object.hasOwn(records,old?.last)?old.last:null,report:typeof old?.report==='string'?old.report.slice(0,40000):'',draft:typeof old?.draft==='string'?old.draft.slice(0,3000):''}];
+    const completedReplies = old?.completedReplies;
+    const complete = Array.isArray(completedReplies) && completedReplies.length === questionCount && completedReplies.every(text => typeof text === 'string' && text.trim() && text.length <= 3000);
+    return [task.id,{range,proof,records,completedReplies:complete ? [...completedReplies] : [],replies:validReplies ? replies : [],last:Object.hasOwn(records,old?.last)?old.last:null,report:typeof old?.report==='string'?old.report.slice(0,40000):'',draft:typeof old?.draft==='string'?old.draft.slice(0,3000):''}];
   }));
 }
 export function trackTaskEdits(attempt,source){

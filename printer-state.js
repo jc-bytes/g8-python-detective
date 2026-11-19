@@ -6,7 +6,7 @@ export function printerState(source) {
   const unique = start >= 0 && source.indexOf(originalPrinterLine, start + 1) < 0
     && (start === 0 || source[start - 1] === '\n')
     && ['', '\n'].includes(source.charAt(start + originalPrinterLine.length));
-  return { range: unique ? [start, start + originalPrinterLine.length] : null, metOwner: false, tourStop: -1, tourDone: false, dialogue: 0, visitedBook: false, page: -1, reply: '', replied: false, result: null };
+  return { range: unique ? [start, start + originalPrinterLine.length] : null, metOwner: false, tourStop: -1, tourDone: false, dialogue: 0, visitedBook: false, chaptersRead: [], page: -1, reply: '', replied: false, result: null };
 }
 
 // Follow a single edit before, after, or inside the strip. Ask for a new
@@ -38,6 +38,7 @@ export function restorePrinter(value, source) {
   clean.metOwner = value.metOwner === true || (value.metOwner === undefined && (value.replied === true || value.dialogue > 0));
   clean.tourDone = value.tourDone === true;
   if(Number.isInteger(value.tourStop) && value.tourStop>=0 && value.tourStop<6)clean.tourStop=value.tourStop;
+  if (Array.isArray(value.chaptersRead)) clean.chaptersRead = [...new Set(value.chaptersRead.filter(i => Number.isInteger(i) && i >= 0 && i < 5))];
   clean.visitedBook = value.visitedBook === true;
   if (typeof value.visitedBook === 'boolean' && Number.isInteger(value.dialogue) && value.dialogue>=0 && value.dialogue<=5) clean.dialogue=value.dialogue;
   if (Number.isInteger(value.page) && value.page>=-1 && value.page<5) clean.page=value.page;

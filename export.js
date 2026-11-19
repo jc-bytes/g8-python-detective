@@ -32,11 +32,12 @@ export function caseDisposition(snapshot) {
 }
 
 // File the same exhibit print in the browser folder and the downloadable report.
-export function exhibitPrint(subject) {
+export function exhibitPrint(subject, scale = 1) {
   const canvas = document.createElement('canvas');
-  canvas.width = 340;
-  canvas.height = 204;
+  canvas.width = 340 * scale;
+  canvas.height = 204 * scale;
   const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
   ctx.fillStyle = '#fffdf4';
   ctx.fillRect(0, 0, 340, 204);
   ctx.save();
@@ -84,6 +85,7 @@ export function reportSections(snapshot) {
   const note = value => entry('text', value);
   const label = value => entry('label', value);
   const code = value => entry('code', value);
+  const answer = (prompt, value, author = 'Student answer') => sections.at(-1).entries.push({kind:'answer', prompt, value, author});
   const assessment = snapshot.mode === 'assessment';
   if (assessment) {
     heading('Statement of the store owner');
@@ -118,21 +120,34 @@ export function reportSections(snapshot) {
 
     }
     if (caseDisposition(snapshot) === 'Receipts verified') {
-      label('Finding at the counter');
+      label('Game-generated receipt summary');
       note('The repaired till printed 18 for the three notebooks, matching the owner’s handwritten receipt. A second purchase printed 10. With an empty order, the till printed 0 and left out “Order recorded”. The three receipts are filed together in Exhibit 01.');
+    }
+    heading('Student answers');
+    for (const explanation of EXPLANATIONS) {
+      label(explanation.title);
+      const {id, questions} = explanation;
+      const task = snapshot.tasks?.[id];
+      const noteText = snapshot.notes[id];
+      if (noteText?.trim()) {
+        if (task?.completedReplies?.join('\n') === noteText) {
+          task.completedReplies.forEach((text,i) => answer(questions[i], text));
+        } else {
+          // Older saves and repair-desk responses store one statement for the topic.
+          answer('', noteText, 'Student statement');
+        }
+      } else {
+        const replies = task?.replies || [];
+        replies.forEach((text,i) => answer(questions[i], text));
+        if (!task?.draft?.trim()) note(replies.length ? 'Remaining answers pending.' : 'No student answer yet.');
+      }
+      if (task?.draft?.trim()) answer(questions[task.replies.length], task.draft, 'Student draft · unsent');
     }
     for (const [id, question] of Object.entries(repairQuestions)) {
       const reply = snapshot.repairReplies?.[id];
-      if (reply?.text) { label(`Store owner: ${question}`); note(`${reply.sent ? 'Detective' : 'Notebook draft'}: ${reply.text}`); }
+      if (reply?.text) answer(question, reply.text, reply.sent ? 'Student answer' : 'Student draft · unsent');
     }
-    for (const explanation of EXPLANATIONS) {
-      label(explanation.title);
-      const replies = snapshot.tasks?.[explanation.id]?.replies || [];
-      note(snapshot.notes[explanation.id]?.trim() || [...replies, 'Statement pending.'].join('\n'));
-      const draft = snapshot.tasks?.[explanation.id]?.draft;
-      if (draft) note(`Notebook draft: ${draft}`);
-    }
-    if (snapshot.printer?.reply?.trim()) { label(PRINTER_QUESTION); note(`${snapshot.printer.replied ? 'Detective' : 'Notebook draft'}: ${snapshot.printer.reply}`); }
+    if (snapshot.printer?.reply?.trim()) answer(PRINTER_QUESTION, snapshot.printer.reply, snapshot.printer.replied ? 'Student answer' : 'Student draft · unsent');
   }
   heading('Exhibit 01 · Printer receipts');
   for (const test of assessment ? [TESTS[0], TESTS[2], TESTS[1]] : [{id:'practice'}]) {
@@ -161,11 +176,11 @@ export function reportSections(snapshot) {
       if (card || connection?.line || connection?.reason) {
         label(slot.title); if (card) note(`Attached evidence: ${card.title}`);
         if (connection?.line) note(`Line under investigation: ${connection.line}`);
-        if (connection?.reason) note(connection.reason);
+        if (connection?.reason) answer('Reason for the suspected line', connection.reason, 'Student note');
       }
-      if (!EXPLANATIONS.some(item => item.id === slot.id) && snapshot.notes[slot.id]) note(snapshot.notes[slot.id]);
+      if (!EXPLANATIONS.some(item => item.id === slot.id) && snapshot.notes[slot.id]) answer(slot.object, snapshot.notes[slot.id], 'Student note');
     }
-    if(snapshot.earlierEntryNote) note(snapshot.earlierEntryNote);
+    if(snapshot.earlierEntryNote) answer('Earlier entry', snapshot.earlierEntryNote, 'Student note');
     for (const task of tasks) for (const [kind, record] of Object.entries(snapshot.tasks?.[task.id]?.records || {})) {
       label(`${task.title} · ${kind} test · Revision ${record.revision}`); code(record.candidate); code(record.output);
       if (record.ownerLine) note(record.ownerLine);
@@ -215,8 +230,15 @@ export function createReport(snapshot, filedAt = new Date()) {
           lines.push(exhibit.revised === null ? {text:'See the full till listing in Exhibit 02.'} :
             {stack:[{text:'Line now in the till',bold:true},{text:exhibit.revised,font:'Mono',preserveLeadingSpaces:true}],margin:[0,5,0,0]});
         }
-        content.push({table:{widths:[110,'*'],body:[[{image:exhibitPrint(exhibit.subject),width:110},{stack:lines}]]},
+        content.push({table:{widths:[255,'*'],body:[[{image:exhibitPrint(exhibit.subject, 2),width:255},{stack:lines}]]},
           layout:'lightHorizontalLines',margin:[0,5,0,9]});
+        continue;
+      }
+      if (kind === 'answer') {
+        const stack = [];
+        if (exhibit.prompt) stack.push({text:exhibit.prompt, bold:true, margin:[0,0,0,4]});
+        stack.push({text:exhibit.author, bold:true, fontSize:9, color:'#24564b'}, {text:value, fontSize:11});
+        content.push({table:{widths:['*'], body:[[{stack, fillColor:'#edf3ed', margin:[6,4,6,4]}]]}, layout:'noBorders', margin:[0,3,0,6]});
         continue;
       }
       if (kind === 'code' || kind === 'quote') {

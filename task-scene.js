@@ -1,3 +1,6 @@
+import { sentenceReminder, setupAnswerField } from './answer-field.js';
+import { playSound } from './sound.js';
+import { ruleTopics, chapterIndex } from './rule-book.js';
 import { speak, finishSpeech } from './speech.js';
 import { TESTS, EXPLANATIONS, repairQuestions, repairLines, repairRow } from './case.js';
 import { keptRun, recordRun } from './model.js';
@@ -10,9 +13,9 @@ const stations = {
   operator: 'Calculator',
 };
 const inspectionQuestions = {
-  indent: 'Look at where the two lines start. How can you tell whether “Order recorded” belongs inside the if?',
-  bracket: 'Read the closing message. Do you see anything missing from the print line?',
-  conversion: 'Compare the price and quantity lines. Does the till read both entries as numbers?',
+  indent: 'When should this notice appear?',
+  bracket: 'How does the printer know where its instruction ends?',
+  conversion: 'What does Python get when you type a quantity?',
   name: 'Look at the line that prints the total. Does the name it uses match the name from the calculation?',
   operator: 'Look at the calculation. Would it give the right total for this many items at this price?',
 };
@@ -23,7 +26,7 @@ export function currentOrderRun(attempt) {
 export function stationHint(station, [target, clue]) {
   if (!stations[station] || !stations[target]) return '';
   const question = station === target
-    ? `${inspectionQuestions[station]} Maybe the rule book has an example that could help.`
+    ? `${inspectionQuestions[station]} Read “${ruleTopics[station]}” in the rule book and compare its example with your code.`
     : clue;
   return `You’re at the ${stations[station].toLowerCase()}. ${question}`;
 }
@@ -131,13 +134,17 @@ const clueGoals = {
   operator: [6, 'Check the calculator', 'Compare the printed total with the order.'],
 };
 export function investigationGoal(attempt, current, customer, question) {
-  const initial = [1, 'Check what the printer shows', 'Run the customer’s order. Read the receipt or error.'];
+  const initial = [1, 'Check what the printer shows', 'Enter 6 for Price and 3 for Quantity. Select Run order.'];
   const run = attempt.runs.at(-1);
   if (!run || typeof run.printed !== 'string' || !/^\d{1,8}$/.test(run.price) || !/^\d{1,8}$/.test(run.quantity)) return initial;
   const [target] = judge(run, run.price, run.quantity);
   const repair = current && confirmedRepair(attempt, run, target);
   if (repair && needsRepairReply(attempt, repair)) {
     return [clueGoals[repair][0], `Explain the ${stations[repair].toLowerCase()} repair`, 'Tell the owner why your change worked.'];
+  }
+  if (current && target === 'name' && run.error.includes('NameError')) {
+    if (run.nameComparison === 'calculator') return [5, 'Read the calculator', 'Find the name to the left of the equals sign.'];
+    if (run.nameComparison === 'ledger') return [5, 'Compare the names', 'Check the spelling in the ledger.'];
   }
   if (target !== 'ok') {
     const [number,title,hint] = clueGoals[target] || [1,'Read the Python result','Check the reported line and try again.'];
@@ -189,7 +196,7 @@ export function openOrder(
   openDialog(
     stations[station] || 'Shop counter',
     'Customer order',
-    `<div class="order-work"><section class="order-machine"><p class="order-slip"><strong>Handwritten receipt</strong> · 3 notebooks at 6 each = 18</p><label for="order-code">Till program</label><textarea id="order-code" spellcheck="false" rows="8" maxlength="20000"></textarea><form id="order-form"><label>Price<input id="order-price" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><label>Quantity<input id="order-quantity" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><button class="primary">Run order</button></form><div id="order-result" aria-live="polite"></div></section><aside class="order-owner"><canvas width="36" height="60" aria-hidden="true"></canvas><div><strong>Store owner</strong><p id="order-dialogue" aria-live="polite" aria-atomic="true"></p></div><section class="order-choices" aria-label="Your choices"><button id="reveal-line" type="button">Show full line</button><label id="order-reply" hidden><span id="reply-label">Your reply</span><small id="reply-hint">Answer in a complete sentence.</small><textarea rows="3" maxlength="3000" aria-labelledby="reply-label" aria-describedby="reply-hint"></textarea></label><button id="order-next" hidden></button></section></aside></div>`,
+    `<div class="order-work"><section class="order-machine"><p class="order-slip"><strong>Handwritten receipt</strong> · 3 notebooks at 6 each = 18</p><label for="order-code">Till program</label><textarea id="order-code" spellcheck="false" rows="8" maxlength="20000"></textarea><form id="order-form"><label>Price<input id="order-price" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><label>Quantity<input id="order-quantity" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><button class="primary">Run order</button></form><div id="order-result" aria-live="polite"></div></section><aside class="order-owner"><canvas width="36" height="60" aria-hidden="true"></canvas><div><strong>Store owner</strong><p id="order-dialogue" aria-live="polite" aria-atomic="true"></p></div><section class="order-choices" aria-label="Your choices"><button id="reveal-line" type="button">Show full line</button><label id="order-reply" hidden><span id="reply-label">Your reply</span><small id="reply-hint">Answer in a complete sentence.</small><textarea rows="3" maxlength="3000" aria-labelledby="reply-label" aria-describedby="reply-hint"></textarea><span id="reply-feedback"></span></label><button id="order-next" hidden></button></section></aside></div>`,
     opener,
   );
   const editor = id('order-code'),
@@ -198,6 +205,8 @@ export function openOrder(
     dialogue = id('order-dialogue'),
     next = id('order-next'),
     reply = id('order-reply');
+  const feedback = id('reply-feedback');
+  setupAnswerField(reply.querySelector('textarea'), feedback, false);
   id('reveal-line').onclick=()=>{finishSpeech(dialogue);id('work-dialog').focus({preventScroll:true});};
   paint(document.querySelector('.order-owner canvas'), 'owner');
   const repair = repairLines.find((item) => item.id === station);
@@ -215,7 +224,7 @@ export function openOrder(
   }
 
   const nextCustomer=nextOrder(attempt);
-  let requested=(!attempt.order.quantity || !attempt.order.price) ? nextCustomer : null;
+  let requested=(!attempt.runs.length || !attempt.order.quantity || !attempt.order.price) ? nextCustomer : null;
   function updateOrderSlip() {
     const { price, quantity } = attempt.order;
     const slip=form.parentElement.querySelector('.order-slip');
@@ -225,13 +234,16 @@ export function openOrder(
 
   }
   updateOrderSlip();
-  speak(dialogue, requested ? 'Enter this customer’s price and quantity, then run the order.' : 'Run the till with the price and quantity shown here.');
+  function entryPrompt() {
+    if (requested) return `Enter ${requested.price} for Price and ${requested.quantity} for Quantity. Then select Run order.`;
+    return 'Check the price and quantity, then select Run order.';
+  }
   function clear() {
     form.hidden = false;
     result.replaceChildren();
     next.hidden = true;
     reply.hidden = true;
-    speak(dialogue, 'Run the order to try your changes.');
+    speak(dialogue, entryPrompt());
   }
   editor.oninput = () => {
     const source = attempt.source.slice(0, start) + editor.value + attempt.source.slice(end);
@@ -257,7 +269,6 @@ export function openOrder(
         refresh();
         clear();
         updateOrderSlip();
-        speak(dialogue, 'Run this customer’s order.');
       }
     };
   }
@@ -273,8 +284,19 @@ export function openOrder(
     action('Back to the shop', () => id('work-dialog').close());
     return true;
   }
+  function backToShop() {
+    action('Back to the shop', () => id('work-dialog').close());
+  }
+  function needsReading(station) {
+    const topic = ruleTopics[station];
+    if (attempt.printer.chaptersRead.includes(chapterIndex(topic))) return false;
+    speak(dialogue, `${dialogue.textContent} Read “${topic}” at the rule book stand, then come back with your answer.`);
+    backToShop();
+    return true;
+  }
   function show(record, opening = false) {
     clear();
+    id('calculator-reference')?.remove();
     function output(title, text) {
       const block = document.createElement('section'),
         h = document.createElement('strong'),
@@ -300,6 +322,7 @@ export function openOrder(
       else {
         const saved = attempt.repairReplies[repair] ??= {text: '', sent: false};
         speak(dialogue, context + repairQuestions[repair]);
+        if (needsReading(repair)) return;
         collectReply(saved.text, text => { saved.text = text; }, text => {
           saved.text = text;
           saved.sent = true;
@@ -307,8 +330,40 @@ export function openOrder(
       }
       return;
     }
+    if (target === 'name' && record.error.includes('NameError')) {
+      function guide(prompt) {
+        speak(dialogue, prompt);
+        backToShop();
+      }
+      if (station === 'name' && record.nameComparison === 'ledger') {
+        const calculation = repairLines.find(item => item.id === 'operator');
+        const calculationRow = repairRow(record.source, calculation);
+        if (calculationRow !== null) {
+          const reference = document.createElement('p');
+          reference.id = 'calculator-reference';
+          const code = document.createElement('code');
+          code.textContent = record.source.split('\n')[calculationRow];
+          reference.append('Line you saw at the calculator', document.createElement('br'), code);
+          editor.labels[0].before(reference);
+        }
+        speak(dialogue, 'Read “Names” in the rule book. Compare the two lines. Why couldn’t Python find the value?');
+        backToShop();
+      } else if (station === 'name') {
+        if (canEdit()) { record.nameComparison = 'calculator'; save(); refresh(); }
+        guide('Read the name after the comma in the ledger. Python couldn’t find it. Let’s see what name the calculator gave its result.');
+      } else if (station === 'operator' && record.nameComparison) {
+        if (canEdit()) { record.nameComparison = 'ledger'; save(); refresh(); }
+        guide('Look to the left of the equals sign. That’s the name the calculator gives its result. Take that line back to the ledger and compare the spelling.');
+      } else if (record.nameComparison === 'calculator') {
+        guide('We saw the name in the ledger. Which name does the calculator use?');
+      } else {
+        guide('Python couldn’t find the name on the receipt line. Let’s read that line in the ledger.');
+      }
+      return;
+    }
     const hint = (opening || station === target) && stationHint(station, [target, message]);
     speak(dialogue, hint || message);
+    if (station && station === target) backToShop();
     if (target && target !== 'ok' && station !== target) {
       action('Explore the counter', () => id('work-dialog').close());
     }
@@ -326,7 +381,6 @@ export function openOrder(
         refresh();
         clear();
         updateOrderSlip();
-        speak(dialogue, test.quantity === '0' ? 'What do you expect the till to print for an empty order?' : 'The first total was right. Will the till get this one right too?');
         id('order-price').focus();
       });
       return;
@@ -343,11 +397,13 @@ export function openOrder(
     const task = attempt.tasks[question.id];
     const part = task.replies.length;
     speak(dialogue, (part === 0 ? context : '') + question.questions[part]);
+    if (needsReading(question.id)) return;
     collectReply(task.draft, text => { task.draft = text; }, answer => {
       if (part + 1 < question.questions.length) {
         task.replies.push(answer);
       } else {
-        attempt.notes[question.id] = [...task.replies, answer].join('\n');
+        task.completedReplies = [...task.replies, answer];
+        attempt.notes[question.id] = task.completedReplies.join('\n');
         task.replies = [];
       }
       task.draft = '';
@@ -357,11 +413,23 @@ export function openOrder(
     reply.hidden = false;
     const field = reply.querySelector('textarea');
     field.value = draft;
+    feedback.textContent = '';
+    let reviewed = false;
     field.oninput = () => {
+      reviewed = false;
+      next.textContent = 'Reply';
       if (canEdit()) { onDraft(field.value); save(); }
     };
     action('Reply', () => {
       if (!canEdit() || !field.value.trim()) { field.focus(); return; }
+      const reminder = sentenceReminder(field.value);
+      if (reminder && !reviewed) {
+        feedback.textContent = reminder;
+        reviewed = true;
+        next.textContent = 'Send as written';
+        field.focus();
+        return;
+      }
       onReply(field.value.trim());
       save();
       refresh();
@@ -372,7 +440,7 @@ export function openOrder(
   const last = currentOrderRun(attempt);
   if (last)
     show(last, true);
-  else if (!returnToPrinter(nextCustomer) && station) speak(dialogue, `You’re at the ${stations[station].toLowerCase()}. Run this order first. Let’s see where the till stops or what it prints.`);
+  else if (!returnToPrinter(nextCustomer)) speak(dialogue, entryPrompt());
   form.onsubmit = async (e) => {
     e.preventDefault();
     if (!canEdit() || returnToPrinter(nextOrder(attempt))) return;
@@ -390,7 +458,10 @@ export function openOrder(
       const test = TESTS.find((t) => t.price === price && t.quantity === quantity);
       const record = recordRun(attempt, outcome, source, revision, test?.id || 'custom');
       Object.assign(record, { price, quantity, printed: outcome.printed });
-      if (test && (!isFinalOrder(test) || station === 'bracket') && judge(record, price, quantity)[0] === 'ok') attempt.kept[test.id] = record.id;
+      if (test && (!isFinalOrder(test) || station === 'bracket') && judge(record, price, quantity)[0] === 'ok') {
+        attempt.kept[test.id] = record.id;
+        playSound('handle_coins');
+      }
       save();
       refresh();
       if (editor.isConnected) show(record);

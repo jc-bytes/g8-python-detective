@@ -1,9 +1,12 @@
+import { playSound } from './sound.js';
+export const ruleTopics = { bracket: 'Function calls', name: 'Names', conversion: 'Input values', operator: 'Calculations', indent: 'Conditions' };
+
 const pages = [
   ['Function calls','Every opening ( in a function call needs a closing ). Quotation marks enclose the words to print.','print("Lantern lit")','The quote ends the message. The last ) ends the call.'],
   ['Names','Python looks up a name exactly as you wrote it. Compare the spelling where you store a value and where you use it.','shelf = "Blue"\nprint(shelf)','shelf and shel are different names. Only shelf has a value here.'],
   ['Input values','Even when you type digits, input() gives you text. Use int() to turn whole-number text into a number for math.','age = int(input("Age: "))\nprint(age + 1)','Type 12. The inner call reads “12”, the outer call makes it 12, and the next line prints 13.'],
   ['Calculations','Use * for equal groups. Use + to add separate amounts, - to subtract and / to divide.','hours = 3\nminutes = hours * 60\nprint(minutes)','Three hours means three groups of 60 minutes. This prints 180.'],
-  ['Conditions','After an if line ends in a colon, indent its action four spaces. Move back to the left edge for a line that should always run.','rain = 0\nif rain > 0:\n    print("Bring boots")\nprint("Time to go")','With 0, only “Time to go” prints. Change rain to 2 and both messages print.']
+  ['Conditions','An if tests whether something is true. Start its next line four spaces in. Python runs that line only when the test is true. A line back at the left edge runs either way.','rain = 0\nif rain > 0:\n    print("Bring boots")\nprint("Time to go")','When rain is 0, rain > 0 is false. Only “Time to go” prints. When rain is 2, both messages print.']
 ];
 
 // Ink drawings for the flyleaf and the five examples, all in the same print palette.
@@ -66,6 +69,8 @@ function sketch(canvas,index) {
     for(const x of [114,138])line([[x,38],[x+15,38],[x+15,61],[x+24,64],[x+24,72],[x-1,72]],true);
   }
 }
+
+export function chapterIndex(topic) { return pages.findIndex(([title]) => title === topic); }
 
 export function createRuleBook({page,remember}) {
   const dialog=document.createElement('dialog');
@@ -135,6 +140,7 @@ export function createRuleBook({page,remember}) {
 
   function choose(index){
     if(index< -1 || index>=pages.length || index===current)return;
+    playSound('book_flip_1');
     const forward=index>current;
     const animate=!matchMedia('(prefers-reduced-motion: reduce)').matches;
     const compact=matchMedia('(max-width:600px)').matches;
@@ -186,6 +192,9 @@ export function createRuleBook({page,remember}) {
       (forward&&!next.disabled?next:!previous.disabled?previous:next).focus({preventScroll:true});
   }
   return opener=>{
-    origin=opener;turn(page());dialog.showModal();dialog.scrollTop=0;
+    const index = page();
+    playSound('book_open');
+    origin=opener;turn(index);dialog.showModal();dialog.scrollTop=0;
+    remember(index);
   };
 }

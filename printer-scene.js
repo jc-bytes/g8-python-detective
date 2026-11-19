@@ -1,3 +1,4 @@
+import { playSound } from './sound.js';
 import { speak, finishSpeech } from './speech.js';
 import { tasks } from './shop-tasks.js';
 import { openOrder, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun } from './task-scene.js';
@@ -43,6 +44,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   let held='';
   function bag(onChoose){
+    playSound('handle_small_leather');
     tool('Detective bag','<div class="bag-lining"><p>Choose a code piece to carry.</p><div id="strip-bag"></div></div>');
     for(const token of TOOLBOX){
       const button=document.createElement('button');
@@ -66,7 +68,13 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   const readBook=createRuleBook({
     page:()=>getAttempt().printer.page,
-    remember:index=>{if(canEdit()){getAttempt().printer.page=index;save();}}
+    remember:index=>{
+      if (!canEdit()) return;
+      const printer = getAttempt().printer;
+      printer.page = index;
+      if (index >= 0 && !printer.chaptersRead.includes(index)) printer.chaptersRead.push(index);
+      save();
+    }
   });
   function openBook(opener){
     if(canEdit()){getAttempt().printer.visitedBook=true;save();refresh();}
@@ -126,7 +134,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const ticket=++motion;show('walking');await walk.escort('owner');
     if(ticket!==motion)return;
     if(finish && canEdit()){getAttempt().printer.tourDone=true;getAttempt().printer.tourStop=-1;save();}
-    if(finish)show('assignment',['Let’s start at the printer. Run the customer’s order and see what comes out.']);
+    if(finish)show('assignment',['Let’s start at the printer. Enter 6 for Price and 3 for Quantity, then select Run order.']);
     else show('menu','What would you like to know?');
   }
   function inspectTask(station,opener){
@@ -153,7 +161,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const choice=(text,fn)=>choices.push([text,fn]);
     if(screen==='greeting' || screen==='arrival'){
       title='Meet the owner';goal=screen==='arrival'?'Walk up to the counter.':'Hear what happened.';
-      message ||= screen==='arrival' ? `Come a little closer, Detective ${a.identity.firstName.trim()}!` : ['Thanks for coming to my shop.','I had to write a receipt by hand this morning.','Can you find out what went wrong?'];
+      message ||= screen==='arrival' ? `Hello, Detective ${a.identity.firstName.trim()}! Come over to the counter. I could use your help.` : ['Thanks for coming to my shop.','I had to write a receipt by hand this morning.','Can you find out what went wrong?'];
       if(a.printer.tourStop>=0){
         if(screen==='greeting')message=`Let’s go back to the ${stops[a.printer.tourStop][1].toLowerCase()}.`;
         choice('Continue the tour',()=>travel(a.printer.tourStop,false));

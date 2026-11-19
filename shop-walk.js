@@ -1,3 +1,4 @@
+import { playSound } from './sound.js';
 import { tasks } from './shop-tasks.js';
 import { counter, paint, strideLength } from './shop-art.js';
 
@@ -67,7 +68,16 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     }
     if(status.textContent!==hint)status.textContent=hint;
   }
+  let nextFoot = 0, lastStepTime = -Infinity;
+  function footstep() {
+    const now = performance.now();
+    if (now - lastStepTime < 240) return;
+    lastStepTime = now;
+    playSound(`footstep_${nextFoot}`, 0.15);
+    nextFoot = 1 - nextFoot;
+  }
   function drawStep(distance){
+    if (Math.floor((travel + distance) / (strideLength / 2)) > Math.floor(travel / (strideLength / 2))) footstep();
     if(distance>0)lastStation=null;
     travel+=distance;
     draw(reduced.matches || distance===0 ? null : (travel%strideLength)/strideLength);
@@ -208,8 +218,12 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     tourAnimations=[slide(player,from,duration),slide(owner,ownerFrom,duration)];
     const animations=tourAnimations;
     const started=performance.now(), ownerCanvas=owner.querySelector('canvas');
+    let lastBeat = -1;
     function stride(now){
       const phase=((now-started)/duration*Math.max(distance,32)/strideLength)%1;
+      const beat = Math.floor((now-started)/duration*distance/(strideLength/2));
+      if (beat !== lastBeat && distance > 1) footstep();
+      lastBeat = beat;
       paint(sprite,'detective',facing,phase,character);paint(ownerCanvas,'owner',facing,(phase+0.25)%1);
       strideFrame=requestAnimationFrame(stride);
     }
