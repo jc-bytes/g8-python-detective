@@ -114,6 +114,27 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const choices=room.querySelector('.detective-choices');
     id(choices.hidden?'use-object':'owner-order').focus({preventScroll:true});
   }
+  room.querySelector('.detective-choices').addEventListener('keydown', event => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const buttons = [...event.currentTarget.querySelectorAll('button:enabled')];
+    const index = buttons.indexOf(event.target);
+    if (index < 0 || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      const step = event.key === 'ArrowRight' ? 1 : -1;
+      buttons[(index + step + buttons.length) % buttons.length].focus();
+      return;
+    }
+    const current = event.target.getBoundingClientRect();
+    const direction = event.key === 'ArrowDown' ? 1 : -1;
+    const candidates = buttons.map(button => {
+      const rect = button.getBoundingClientRect();
+      return { button, rowDistance: direction * (rect.top - current.top),
+        centerDistance: Math.abs((rect.left + rect.right) - (current.left + current.right)) };
+    }).filter(item => item.rowDistance > 1);
+    candidates.sort((a, b) => a.rowDistance - b.rowDistance || a.centerDistance - b.centerDistance);
+    candidates[0]?.button.focus();
+  });
   function closeConversation(){
     screen='';line='';walk.home();id('shop-intro').hidden=true;refresh();walk.focus();
   }
