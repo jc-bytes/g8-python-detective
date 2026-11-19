@@ -2,6 +2,7 @@ import { setupAnswerField } from './answer-field.js';
 import { playSound, setupSoundToggle } from './sound.js';
 import { paint } from './shop-art.js';
 import { currentOrderRun, judge, stationHint, studentDiagnostic } from './task-scene.js';
+import { chapterIndex } from './rule-book.js';
 import { setupPrinter } from './printer-scene.js';
 import { allowsRepair, repairReminder, CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, TOOLBOX, EXPLANATIONS } from './case.js';
 import { newAttempt, updateSource, insertCodePiece, placeEvidence, recordRun, keptRun, validateAttempt, fileStem } from './model.js';
@@ -98,8 +99,13 @@ function rememberSource() {
   if (undoHistory.length > 30) undoHistory.shift();
 }
 
+function assignedUnreadChapter() {
+  const route = attempt.printer.destination;
+  if (mode === 'assessment' && route?.station === 'book' && route.revision === attempt.revision && !attempt.printer.chaptersRead.includes(chapterIndex(route.chapter))) return route.chapter;
+}
+
 function setSource(source, remember = true, sectionEdit) {
-  if (!canEdit()) return false;
+  if (!canEdit() || assignedUnreadChapter()) return false;
   if (mode === 'assessment' && remember && source !== STARTER && !allowsRepair(attempt.source, source)) {
     const feedback = byId('repair-limit') || byId('toolbox-message');
     if (feedback) feedback.textContent = repairReminder;
@@ -268,7 +274,12 @@ function refresh() {
   byId('evidence-count').textContent = `${count} / 5 cards attached`;
   byId('board-message').textContent = selection?.kind === 'clue' ? 'Clue selected. Select a board slot to attach it.' : attempt.inspected.length ? `${attempt.inspected.length} clues collected. ${count} cards attached. Select a tray card to place or move it.` : 'No evidence collected yet. Inspect an object in the room.';
   if (byId('desk-code') && document.activeElement !== byId('desk-code')) byId('desk-code').value = attempt.source;
-  if (byId('desk-code')) byId('desk-code').readOnly = blocked;
+  if (byId('desk-code')) {
+    const chapter = assignedUnreadChapter();
+    byId('desk-code').readOnly = blocked || Boolean(chapter);
+    if (chapter) byId('repair-limit').textContent = `Read “${chapter}” in the rule book to unlock editing.`;
+    for (const id of ['desk-undo', 'reset-case', 'insert-piece']) byId(id).disabled = blocked || Boolean(chapter);
+  }
   document.querySelectorAll('[data-explanation]').forEach(field => { field.readOnly = blocked; });
   if (byId('line-numbers')) byId('line-numbers').textContent = attempt.source.split('\n').map((line, index) => index + 1).join('\n');
   renderRuns();

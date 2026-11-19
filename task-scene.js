@@ -251,6 +251,10 @@ export function openOrder(
   id('reveal-line').onclick=()=>{finishSpeech(dialogue);id('work-dialog').focus({preventScroll:true});};
   paint(document.querySelector('.order-owner canvas'), 'owner');
   const range = station ? stationRange(attempt, station) : [0, attempt.source.length];
+  const topic = ruleTopics[station];
+  const needsChapter = topic && !attempt.printer.chaptersRead.includes(chapterIndex(topic));
+  const codeLocked = !range || Boolean(needsChapter);
+  editor.readOnly = codeLocked;
   const [start, initialEnd] = range || [0, 0];
   let end = initialEnd;
   editor.value = attempt.source.slice(start, end);
@@ -266,7 +270,7 @@ export function openOrder(
   if (station) {
     const note = document.createElement('small');
     note.id = 'station-scope';
-    note.textContent = 'Fix the supplied lines here. Run order tests the whole till.';
+    note.textContent = needsChapter ? `To edit this code, read “${topic}” in the rule book first.` : 'Fix the supplied lines here. Run order tests the whole till.';
     editor.labels[0].after(note);
     editor.setAttribute('aria-describedby', 'station-scope repair-limit');
   }
@@ -287,7 +291,7 @@ export function openOrder(
   }
   function clear() {
     pointTo(null);
-    editor.readOnly = !range;
+    editor.readOnly = codeLocked;
     updateCleanup();
     form.hidden = false;
     result.replaceChildren();
@@ -307,7 +311,10 @@ export function openOrder(
   };
   editor.oninput = () => {
     const source = attempt.source.slice(0, start) + editor.value + attempt.source.slice(end);
-    if (!range) return;
+    if (editor.readOnly || editor.disabled) {
+      editor.value = attempt.source.slice(start, end);
+      return;
+    }
     if (tooManyLines(editor.value)) {
       const previous = attempt.source.slice(start, end);
       if (editor.value.split('\n').length >= previous.split('\n').length) {
@@ -327,7 +334,7 @@ export function openOrder(
     const cleanup = document.createElement('button');
     cleanup.type = 'button';
     cleanup.textContent = 'Remove extra lines';
-    cleanup.hidden = withoutExtraLines(editor.value, first, lineLimit) === null;
+    cleanup.hidden = editor.readOnly || withoutExtraLines(editor.value, first, lineLimit) === null;
     id('repair-limit').after(cleanup);
     cleanup.onclick = () => {
       if (editor.readOnly || editor.disabled || !canEdit()) return;
@@ -372,6 +379,11 @@ export function openOrder(
     return true;
   }
   function backToShop(destination, chapter, returnStation = station) {
+    if (destination === 'book') {
+      editor.readOnly = true;
+      form.hidden = true;
+      updateCleanup();
+    }
     if (destination) pointTo(destination, chapter, returnStation);
     action('Back to the shop', () => id('work-dialog').close());
   }
@@ -415,7 +427,10 @@ export function openOrder(
       return;
     }
     if (tooManyLines(editor.value)) {
-      speak(dialogue, oldLinesMessage);
+      if (needsChapter) {
+        speak(dialogue, `Read “${topic}” in the rule book. Then come back to fix these lines.`);
+        backToShop('book', topic);
+      } else speak(dialogue, oldLinesMessage);
       return;
     }
     output('Printed receipt', record.printed || 'No receipt printed.');
