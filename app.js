@@ -120,8 +120,8 @@ let entered = false;
 const settings = byId('settings');
 function updateCaseMenu() {
   const inShop = entered && mode === 'assessment' && !atMaterials;
-  byId('other-objects').hidden = !inShop || printer.awaitingOwner();
-  byId('menu-export').hidden = mode === 'practice' || printer.awaitingOwner();
+  byId('other-objects').hidden = !inShop || printer.needsWelcome();
+  byId('menu-export').hidden = mode === 'practice' || printer.needsWelcome();
 }
 byId('game-menu').onclick = () => { updateCaseMenu(); settings.showModal(); };
 byId('menu-close').onclick = () => settings.close();

@@ -80,7 +80,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     ['printer','Printer',['See the paper sticking up? That’s the receipt printer.','The last line usually says “Debug check complete”.','This morning, no receipt came out.']],
     ['book','Rule book',['The open book on the stand is my Python rule book.','I look here when I forget how to write some code.','You can look things up here while you investigate.']]
   ];
-  const firstStop='Let’s start at the input terminal, where I enter the order.';
+  const firstStop='Walk with me. I’ll show you how an order moves through the shop.';
   const nextStopLines=[
     'Now let’s check the calculator. What does it do with those two numbers?',
     'Let’s look in the ledger to see where the total is kept.',
@@ -92,12 +92,15 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   const story=['A customer brought me three notebooks.','Each one cost 6.','The till gave me no receipt.','I wrote one by hand for 18.',firstStop];
   const till=['The till is the machine I use for a sale.','It works out what you owe and prints your receipt.',firstStop];
   let currentAttempt,screen='',line='',pageIndex=0,stopIndex=0,repeatVisit=false,motion=0;
-  function needsWelcome(){const a=getAttempt();return !a.printer.tourDone && !a.runs.length && !a.revision;}
+  function needsWelcome(){const a=getAttempt();return !a.printer.tourDone && !a.printer.replied && !a.runs.length && !a.revision;}
   function awaitingOwner(){const a=getAttempt();return needsWelcome() && !a.printer.metOwner && a.printer.tourStop<0;}
-  const walk=setupWalk(room,{awaitingOwner,canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu')closeConversation();}});
+  const walk=setupWalk(room,{ownerOnly:needsWelcome,canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu')closeConversation();}});
+  let dialogueTimer;
   function show(which,text=''){
     screen=which;line=text;pageIndex=0;id('shop-intro').hidden=false;refresh();
-    if(!room.hidden && screen!=='walking')focusReply();
+    if(!room.hidden && screen!=='walking'){
+      if(screen==='assignment')walk.focus();else focusReply();
+    }
   }
   function focusReply(){
     const choices=room.querySelector('.detective-choices');
@@ -123,7 +126,8 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const ticket=++motion;show('walking');await walk.escort('owner');
     if(ticket!==motion)return;
     if(finish && canEdit()){getAttempt().printer.tourDone=true;getAttempt().printer.tourStop=-1;save();}
-    show('menu',finish?['Your bag holds spare code pieces.','Your case folder keeps your work.','Use my handwritten receipt to enter the price and quantity.','Run the order and tell me what happens.']:'What would you like to know?');
+    if(finish)show('assignment',['Let’s start at the printer. Run the customer’s order and see what comes out.']);
+    else show('menu','What would you like to know?');
   }
   function inspectTask(station,opener){
     if(needsWelcome()){inviteToTalk();return;}
@@ -133,6 +137,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     openOrder(station,opener,{getAttempt,canEdit,edit,save,refresh,openDialog,run,useBag,paint,openFolder});
   }
   function refresh(){
+    clearTimeout(dialogueTimer);
     const a=getAttempt();
     walk.setCharacter(a.identity.character);
     if(a!==currentAttempt){currentAttempt=a;++motion;walk.reset();line='';screen=needsWelcome()?'arrival':'';id('shop-intro').hidden=!screen;}
@@ -187,17 +192,27 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     }
     for(const task of tasks)room.querySelector(`[data-station-id="${task.id}"]`).toggleAttribute('data-available',true);
     id('detective-name').textContent='Detective '+a.identity.firstName.trim();id('quest-stage').textContent=touring?'The broken order':`Task ${number}`;id('quest-title').textContent=title;id('shop-goal').textContent=goal;
-    const walking=screen==='walking';id('shop-floor').toggleAttribute('data-escorting',walking || screen==='stop' || screen==='objects');
+    const walking=screen==='walking';id('shop-floor').toggleAttribute('data-escorting',walking || screen==='stop' || screen==='objects' || screen==='assignment');
     const guiding=id('shop-floor').hasAttribute('data-escorting');
-    for(const control of ['worn-bag','room-bag','case-folder'])id(control).hidden=guiding || awaitingOwner();
+    for(const control of ['worn-bag','room-bag','case-folder'])id(control).hidden=guiding || needsWelcome();
     id('shop-intro').parentElement.hidden=walking;const pages=Array.isArray(message)?message:message.split(/(?<=[.!?])\s+(?=[A-Z])/);
     speak(id('owner-line'), pages[pageIndex] ?? pages[0]);
     id('shop-floor').toggleAttribute('data-arrival',screen==='arrival');
     const inConversation=Boolean(screen && screen!=='arrival' && !walking);
     const more=inConversation && pageIndex+1<pages.length;
     id('shop-floor').toggleAttribute('data-speaking',inConversation || walking);
-    room.querySelector('.detective-choices').hidden=!inConversation || more;
-    if(inConversation)choice('End conversation',closeConversation);
+    if(screen==='menu')choice('Back to investigation',closeConversation);
+    room.querySelector('.detective-choices').hidden=!inConversation || more || !choices.length;
+    if(!more && !room.hidden){
+      let advance;
+      if(screen==='greeting' && (line===story || line===till))advance=()=>travel(0,false);
+      if(screen==='stop' && !repeatVisit)advance=()=>stopIndex===stops.length-1?returnTogether(true):travel(stopIndex+1,false);
+      if(screen==='assignment')advance=closeConversation;
+      if(advance)dialogueTimer=setTimeout(()=>{
+        if(room.hidden || document.hidden || document.querySelector('dialog[open]')){refresh();return;}
+        advance();
+      },5000);
+    }
     const primary=id('owner-order'); const group=primary.parentElement;group.querySelectorAll('.owner-choice').forEach(el=>el.remove());
     choices.forEach(([label,fn],i)=>{const button=i===0?primary:document.createElement('button');button.textContent=label;button.onclick=fn;if(i){button.className='owner-choice';group.append(button);}});
     id('start-order').textContent=needsWelcome()?'Meet the owner':'Talk to the owner';id('start-order').disabled=walking;id('start-order').hidden=inConversation || walking;id('start-order').onclick=()=>walk.goTo('owner');
@@ -205,5 +220,5 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   id('case-folder').onclick=e=>openFolder(e.currentTarget);
   id('worn-bag').onclick=id('room-bag').onclick=()=>bag();
-  return {refresh,useBag,restoreBag,needsWelcome,awaitingOwner,inviteToTalk,walkToCounter:()=>walk.focus()};
+  return {refresh,useBag,restoreBag,needsWelcome,inviteToTalk,walkToCounter:()=>walk.focus()};
 }
