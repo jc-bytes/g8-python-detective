@@ -2,7 +2,7 @@ import { playSound } from './sound.js';
 import { speak, finishSpeech } from './speech.js';
 import { tasks } from './shop-tasks.js';
 import { openOrder, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun } from './task-scene.js';
-import { createRuleBook } from './rule-book.js';
+import { chapterIndex, createRuleBook } from './rule-book.js';
 import { setupWalk } from './shop-walk.js';
 import { TOOLBOX } from './case.js';
 import { paint } from './shop-art.js';
@@ -66,14 +66,27 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     hud.setAttribute('popover','manual');dialog.append(hud);hud.showPopover();
     bagButton.onclick=()=>bag(onChoose);
   }
+  let destination;
+  function pointTo(station, chapter, returnStation) {
+    const attempt = getAttempt();
+    destination = station ? {station, chapter, returnStation, revision: attempt.revision} : null;
+    if (canEdit() && (destination || attempt.printer.destination)) {
+      attempt.printer.destination = destination;
+      save();
+    }
+    refresh();
+  }
   const readBook=createRuleBook({
-    page:()=>getAttempt().printer.page,
+    page:()=>destination?.station === 'book' ? -1 : getAttempt().printer.page,
     remember:index=>{
       if (!canEdit()) return;
       const printer = getAttempt().printer;
       printer.page = index;
       if (index >= 0 && !printer.chaptersRead.includes(index)) printer.chaptersRead.push(index);
       save();
+      if (destination?.station === 'book' && chapterIndex(destination.chapter) === index) {
+        pointTo(destination.returnStation);
+      }
     }
   });
   function openBook(opener){
@@ -103,11 +116,10 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   function needsWelcome(){const a=getAttempt();return !a.printer.tourDone && !a.printer.replied && !a.runs.length && !a.revision;}
   function awaitingOwner(){const a=getAttempt();return needsWelcome() && !a.printer.metOwner && a.printer.tourStop<0;}
   const walk=setupWalk(room,{ownerOnly:needsWelcome,canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu')closeConversation();}});
-  let dialogueTimer;
   function show(which,text=''){
     screen=which;line=text;pageIndex=0;id('shop-intro').hidden=false;refresh();
     if(!room.hidden && screen!=='walking'){
-      if(screen==='assignment')walk.focus();else focusReply();
+      focusReply();
     }
   }
   function focusReply(){
@@ -163,13 +175,13 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     screen='';line='';walk.home();id('shop-floor').removeAttribute('data-escorting');id('shop-intro').hidden=true;
     if(opener===id('owner-order') || !opener?.isConnected)opener=id('start-order');
     if(station==='bracket')visit();
-    openOrder(station,opener,{getAttempt,canEdit,edit,save,refresh,openDialog,run,useBag,paint,openFolder});
+    destination = null;
+    openOrder(station,opener,{pointTo,getAttempt,canEdit,edit,save,refresh,openDialog,run,useBag,paint,openFolder});
   }
   function refresh(){
-    clearTimeout(dialogueTimer);
     const a=getAttempt();
     walk.setCharacter(a.identity.character);
-    if(a!==currentAttempt){currentAttempt=a;++motion;walk.reset();line='';screen=needsWelcome()?'arrival':'';id('shop-intro').hidden=!screen;}
+    if(a!==currentAttempt){destination=a.printer.destination;currentAttempt=a;++motion;walk.reset();line='';screen=needsWelcome()?'arrival':'';id('shop-intro').hidden=!screen;}
     const last=currentOrderRun(a);
     const customer=nextOrder(a), question=pendingQuestion(a);
     const finished=!customer && !question;
@@ -219,6 +231,18 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
       choice(finished?'Review case folder':last?'Continue order':'I’m ready to try the order',finished?review:order);
       if(finished)goal='Review your case report.';
     }
+    if (destination && destination.revision !== a.revision) destination = null;
+    const target = !touring && (destination?.station || (!last && !a.runs.length ? 'bracket' : null));
+    const propId = target === 'bracket' ? 'printer' : target;
+    for (const prop of room.querySelectorAll('.shop-prop')) {
+      const marked = prop.dataset.stationId === propId;
+      prop.toggleAttribute('data-next-stop', marked);
+      if (marked && destination) {
+        const label = prop.querySelector('span').textContent;
+        goal = destination.chapter ? `Walk to the Rule book. Read “${destination.chapter}”.` : `Walk to the ${label}. Press Enter to inspect it.`;
+        title = destination.chapter ? 'Read the rule book' : `Next stop: ${label}`;
+      }
+    }
     for(const task of tasks)room.querySelector(`[data-station-id="${task.id}"]`).toggleAttribute('data-available',true);
     id('detective-name').textContent='Detective '+a.identity.firstName.trim();id('quest-stage').textContent=touring?'The broken order':`Task ${number}`;id('quest-title').textContent=title;id('shop-goal').textContent=goal;
     const walking=screen==='walking';id('shop-floor').toggleAttribute('data-escorting',walking || screen==='stop' || screen==='objects' || screen==='assignment');
@@ -231,17 +255,8 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const more=inConversation && pageIndex+1<pages.length;
     id('shop-floor').toggleAttribute('data-speaking',inConversation || walking);
     if(screen==='menu')choice('Back to investigation',closeConversation);
+    if(screen==='assignment')choice('Start investigating',closeConversation);
     room.querySelector('.detective-choices').hidden=!inConversation || more || !choices.length;
-    if(!more && !room.hidden){
-      let advance;
-      if(screen==='greeting' && (line===story || line===till))advance=()=>travel(0,false);
-      if(screen==='stop' && !repeatVisit)advance=()=>stopIndex===stops.length-1?returnTogether(true):travel(stopIndex+1,false);
-      if(screen==='assignment')advance=closeConversation;
-      if(advance)dialogueTimer=setTimeout(()=>{
-        if(room.hidden || document.hidden || document.querySelector('dialog[open]')){refresh();return;}
-        advance();
-      },5000);
-    }
     const primary=id('owner-order'); const group=primary.parentElement;group.querySelectorAll('.owner-choice').forEach(el=>el.remove());
     choices.forEach(([label,fn],i)=>{const button=i===0?primary:document.createElement('button');button.textContent=label;button.onclick=fn;if(i){button.className='owner-choice';group.append(button);}});
     id('start-order').textContent=needsWelcome()?'Meet the owner':'Talk to the owner';id('start-order').disabled=walking;id('start-order').hidden=inConversation || walking;id('start-order').onclick=()=>walk.goTo('owner');

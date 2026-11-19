@@ -3,6 +3,7 @@ import { playSound } from './sound.js';
 import { ruleTopics, chapterIndex } from './rule-book.js';
 import { speak, finishSpeech } from './speech.js';
 import { TESTS, EXPLANATIONS, repairQuestions, repairLines, repairRow } from './case.js';
+import { stationRange } from './shop-tasks.js';
 import { keptRun, recordRun } from './model.js';
 
 const stations = {
@@ -190,6 +191,7 @@ export function openOrder(
     useBag,
     openFolder,
     paint,
+    pointTo,
   },
 ) {
   const attempt = getAttempt();
@@ -209,20 +211,26 @@ export function openOrder(
   setupAnswerField(reply.querySelector('textarea'), feedback, false);
   id('reveal-line').onclick=()=>{finishSpeech(dialogue);id('work-dialog').focus({preventScroll:true});};
   paint(document.querySelector('.order-owner canvas'), 'owner');
-  const repair = repairLines.find((item) => item.id === station);
-  const lines = attempt.source.split('\n');
-  const row = repair ? repairRow(attempt.source, repair) : null;
-  const startRow =
-    row === null ? 0 : Math.max(0, row - (['conversion', 'indent'].includes(station) ? 1 : 0));
-  const start = lines.slice(0, startRow).reduce((n, line) => n + line.length + 1, 0);
-  let end =
-    row === null ? attempt.source.length : start + lines.slice(startRow, row + 1).join('\n').length;
+  const range = station ? stationRange(attempt, station) : [0, attempt.source.length];
+  const [start, initialEnd] = range || [0, 0];
+  let end = initialEnd;
   editor.value = attempt.source.slice(start, end);
-  if (row !== null) {
+  if (station) {
     editor.labels[0].textContent = stations[station] + ' code';
-    editor.rows = Math.max(2, row - startRow + 1);
+    editor.rows = Math.max(2, Math.min(8, editor.value.split('\n').length));
+  }
+  if (!range) {
+    editor.readOnly = true;
+    editor.placeholder = 'This section could not be located in your saved program. Open the full till program at the owner’s counter to review it.';
   }
 
+  if (station) {
+    const note = document.createElement('small');
+    note.id = 'station-scope';
+    note.textContent = 'You edit this section. Run order tests the whole till.';
+    editor.labels[0].after(note);
+    editor.setAttribute('aria-describedby', note.id);
+  }
   const nextCustomer=nextOrder(attempt);
   let requested=(!attempt.runs.length || !attempt.order.quantity || !attempt.order.price) ? nextCustomer : null;
   function updateOrderSlip() {
@@ -239,6 +247,7 @@ export function openOrder(
     return 'Check the price and quantity, then select Run order.';
   }
   function clear() {
+    pointTo(null);
     form.hidden = false;
     result.replaceChildren();
     next.hidden = true;
@@ -247,13 +256,14 @@ export function openOrder(
   }
   editor.oninput = () => {
     const source = attempt.source.slice(0, start) + editor.value + attempt.source.slice(end);
-    if (edit(source)) {
+    if (!range) return;
+    if (edit(source, station ? {station, range: [start, start + editor.value.length]} : null)) {
       end = start + editor.value.length;
       clear();
     } else editor.value = attempt.source.slice(start, end);
   };
   function insert(token) {
-    if (editor.disabled || !canEdit()) return;
+    if (editor.disabled || editor.readOnly || !canEdit()) return;
     editor.setRangeText(token, editor.selectionStart, editor.selectionEnd, 'end');
     editor.oninput();
     editor.focus();
@@ -281,17 +291,18 @@ export function openOrder(
     if (station === 'bracket' || !isFinalOrder(test)) return false;
     form.hidden = true;
     speak(dialogue, 'The till is ready. Meet me at the printer and we’ll check the last two receipts.');
-    action('Back to the shop', () => id('work-dialog').close());
+    backToShop('bracket');
     return true;
   }
-  function backToShop() {
+  function backToShop(destination, chapter, returnStation = station) {
+    if (destination) pointTo(destination, chapter, returnStation);
     action('Back to the shop', () => id('work-dialog').close());
   }
   function needsReading(station) {
     const topic = ruleTopics[station];
     if (attempt.printer.chaptersRead.includes(chapterIndex(topic))) return false;
     speak(dialogue, `${dialogue.textContent} Read “${topic}” at the rule book stand, then come back with your answer.`);
-    backToShop();
+    backToShop('book', topic, station);
     return true;
   }
   function show(record, opening = false) {
@@ -331,9 +342,9 @@ export function openOrder(
       return;
     }
     if (target === 'name' && record.error.includes('NameError')) {
-      function guide(prompt) {
+      function guide(destination, prompt) {
         speak(dialogue, prompt);
-        backToShop();
+        backToShop(destination);
       }
       if (station === 'name' && record.nameComparison === 'ledger') {
         const calculation = repairLines.find(item => item.id === 'operator');
@@ -346,25 +357,35 @@ export function openOrder(
           reference.append('Line you saw at the calculator', document.createElement('br'), code);
           editor.labels[0].before(reference);
         }
-        speak(dialogue, 'Read “Names” in the rule book. Compare the two lines. Why couldn’t Python find the value?');
-        backToShop();
+        if (attempt.printer.chaptersRead.includes(chapterIndex('Names'))) {
+          speak(dialogue, 'Compare the calculator line above with the ledger code. Edit the ledger, then select Run order.');
+        } else {
+          speak(dialogue, 'Read “Names” in the rule book. Then bring the example back to the ledger.');
+          backToShop('book', 'Names');
+        }
       } else if (station === 'name') {
         if (canEdit()) { record.nameComparison = 'calculator'; save(); refresh(); }
-        guide('Read the name after the comma in the ledger. Python couldn’t find it. Let’s see what name the calculator gave its result.');
+        guide('operator', 'Read the name after the comma in the ledger. Python couldn’t find it. Let’s see what name the calculator gave its result.');
       } else if (station === 'operator' && record.nameComparison) {
         if (canEdit()) { record.nameComparison = 'ledger'; save(); refresh(); }
-        guide('Look to the left of the equals sign. That’s the name the calculator gives its result. Take that line back to the ledger and compare the spelling.');
+        guide('name', 'Look to the left of the equals sign. That’s the name the calculator gives its result. Take that line back to the ledger and compare the spelling.');
       } else if (record.nameComparison === 'calculator') {
-        guide('We saw the name in the ledger. Which name does the calculator use?');
+        guide('operator', 'We saw the name in the ledger. Which name does the calculator use?');
       } else {
-        guide('Python couldn’t find the name on the receipt line. Let’s read that line in the ledger.');
+        guide('name', 'Python couldn’t find the name on the receipt line. Let’s read that line in the ledger.');
       }
       return;
     }
     const hint = (opening || station === target) && stationHint(station, [target, message]);
     speak(dialogue, hint || message);
-    if (station && station === target) backToShop();
+    if (station && station === target) {
+      if (attempt.printer.chaptersRead.includes(chapterIndex(ruleTopics[station]))) {
+        speak(dialogue, `${inspectionQuestions[station]} Edit the ${stations[station]} code here, then select Run order.`);
+        backToShop();
+      } else backToShop('book', ruleTopics[station]);
+    }
     if (target && target !== 'ok' && station !== target) {
+      pointTo(target);
       action('Explore the counter', () => id('work-dialog').close());
     }
     if (target !== 'ok') return;

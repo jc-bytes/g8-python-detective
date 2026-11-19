@@ -39,6 +39,12 @@ export function restorePrinter(value, source) {
   clean.tourDone = value.tourDone === true;
   if(Number.isInteger(value.tourStop) && value.tourStop>=0 && value.tourStop<6)clean.tourStop=value.tourStop;
   if (Array.isArray(value.chaptersRead)) clean.chaptersRead = [...new Set(value.chaptersRead.filter(i => Number.isInteger(i) && i >= 0 && i < 5))];
+  const route = value.destination;
+  const stations = ['bracket', 'indent', 'operator', 'name', 'conversion'];
+  if (route && Number.isSafeInteger(route.revision) && (stations.includes(route.station) ||
+      (route.station === 'book' && typeof route.chapter === 'string' && route.chapter.length <= 32 && (route.returnStation == null || stations.includes(route.returnStation))))) {
+    clean.destination = {station:route.station, chapter:route.chapter, returnStation:route.returnStation, revision:route.revision};
+  }
   clean.visitedBook = value.visitedBook === true;
   if (typeof value.visitedBook === 'boolean' && Number.isInteger(value.dialogue) && value.dialogue>=0 && value.dialogue<=5) clean.dialogue=value.dialogue;
   if (Number.isInteger(value.page) && value.page>=-1 && value.page<5) clean.page=value.page;

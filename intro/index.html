@@ -94,10 +94,21 @@ const slides = [
     caption: "Your notes", code: "Packs typed    Cards shown\n     3              12\n     0               0"
   },
   {
+    topic: 'From cards to receipts', title: 'What would you do with a wrong count?',
+    text: 'Imagine you packed two sets of four cards. You counted eight, but the screen shows six. The program finished, so what should you check?',
+    caption: 'Your test', code: 'Packs: 2     Cards per pack: 4\nYou counted: 8\nScreen shows: 6',
+    prompt: 'Tell a partner which part you would inspect first. Press Next to compare.'
+  },
+  {
+    topic: 'From cards to receipts', title: 'Check how the program counted.',
+    text: 'Six is what you get from 2 + 4. Look at the calculation. If it adds the packs and cards, change it to multiply. Try the same two packs again.',
+    caption: 'Explain your test', prompt: '“I tried two packs again. This time the screen showed eight, which matches my count.” In the shop, use the handwritten receipt to check your result.'
+  },
+  {
     topic: 'The Broken Order', title: 'Try it in the shop.',
     text: 'Walk up to the owner with the arrow keys, or tap the floor. Press Enter or tap the action button to talk. The owner will tell you what went wrong.',
     caption: 'Your first check',
-    prompt: 'Before you run the order, guess what the receipt should say. Run it and compare. If you get stuck, walk to the rule book for an example. After a fix, try the same order again. Tell the owner what changed. Save your case report when you finish.', game: true
+    prompt: 'After the tour, walk to the Printer. Type 6 in Price and 3 in Quantity. Select Run order. Read the owner’s message and find the marked object on the counter.', game: true
   }
 ];
 const slide = document.querySelector('#slide');

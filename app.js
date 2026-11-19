@@ -98,12 +98,11 @@ function rememberSource() {
   if (undoHistory.length > 30) undoHistory.shift();
 }
 
-function setSource(source, remember = true, printerRange) {
+function setSource(source, remember = true, sectionEdit) {
   if (!canEdit()) return false;
   try {
     if (remember && source !== attempt.source) rememberSource();
-    updateSource(attempt, source);
-    if (printerRange) attempt.printer.range = printerRange;
+    updateSource(attempt, source, sectionEdit);
     save();
     refresh();
     return true;

@@ -439,3 +439,9 @@ dialog.bound-book {
 
 .answer-feedback:not(:empty) {display:block;margin:.35rem 0;font-weight:600;line-height:1.35}
 .answer-feedback:empty {display:none}
+
+.shop-prop[data-next-stop] > span {outline:3px solid #ffcf57;box-shadow:0 0 0 5px #293f3f}
+.shop-prop[data-next-stop] > span::before {content:'▼ ';color:#754516}
+
+#station-scope {display:block;font-size:.8rem;font-weight:normal}
+#calculator-reference code {overflow-wrap:anywhere}

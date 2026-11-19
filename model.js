@@ -1,16 +1,15 @@
 import { restoreTasks, trackTaskEdits } from './shop-tasks.js';
-import { printerState, remapPrinter, restorePrinter } from './printer-state.js';
+import { printerState, restorePrinter } from './printer-state.js';
 import { CASE_VERSION, CASES, SIMPLIFIED_STARTER, STARTER, TESTS, PRACTICE_SOURCE, TOOLBOX } from './case.js';
 
 export function newAttempt(mode = 'assessment') {
   return { starterRevision: 3, repairReplies: {}, order: {price:"", quantity:""}, tasks: restoreTasks(null,mode === 'assessment' ? STARTER : PRACTICE_SOURCE), printer: printerState(mode === 'assessment' ? STARTER : PRACTICE_SOURCE), version: CASE_VERSION, mode, identity: { firstName: '', lastName: '', group: '', character: 'boy' }, source: mode === 'practice' ? PRACTICE_SOURCE : STARTER, revision: 0, inspected: [], evidence: {}, connections: {}, notes: {}, runs: [], kept: {}, updatedAt: null, saveId: null };
 }
 
-export function updateSource(attempt, source) {
+export function updateSource(attempt, source, sectionEdit) {
   if (typeof source !== 'string' || source.length > 20000) throw new Error('Keep the program below 20,000 characters.');
   if (source !== attempt.source) {
-    trackTaskEdits(attempt,source);
-    remapPrinter(attempt.printer, attempt.source, source);
+    trackTaskEdits(attempt, source, sectionEdit);
     attempt.source = source;
     attempt.revision += 1;
   }
@@ -103,5 +102,10 @@ export function validateAttempt(value, expectedMode) {
   for (const key of ['price','quantity']) if (typeof value.order?.[key] === 'string' && /^\d{0,8}$/.test(value.order[key])) clean.order[key] = value.order[key];
   clean.tasks = restoreTasks(value.tasks, clean.source);
   clean.printer = restorePrinter(value.printer, clean.source);
+  if (clean.source !== value.source) {
+    const migrated = restoreTasks(null, clean.source);
+    for (const id of Object.keys(migrated)) clean.tasks[id].range = migrated[id].range;
+    clean.printer.range = printerState(clean.source).range;
+  }
   return clean;
 }

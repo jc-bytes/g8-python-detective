@@ -1,4 +1,4 @@
-import { STARTER, EXPLANATIONS } from './case.js';
+import { STARTER, EXPLANATIONS, repairLines, repairRow } from './case.js';
 import { remapPrinter } from './printer-state.js';
 
 export const tasks = [
@@ -31,6 +31,46 @@ export function restoreTasks(saved,source,starter=STARTER){
     return [task.id,{range,proof,records,completedReplies:complete ? [...completedReplies] : [],replies:validReplies ? replies : [],last:Object.hasOwn(records,old?.last)?old.last:null,report:typeof old?.report==='string'?old.report.slice(0,40000):'',draft:typeof old?.draft==='string'?old.draft.slice(0,3000):''}];
   }));
 }
-export function trackTaskEdits(attempt,source){
-  for(const task of tasks)remapPrinter(attempt.tasks[task.id],attempt.source,source);
+export function trackTaskEdits(attempt, source, sectionEdit) {
+  const delta = source.length - attempt.source.length;
+  for (const id of [...tasks.map(task => task.id), 'bracket']) {
+    const section = id === 'bracket' ? attempt.printer : attempt.tasks[id];
+    if (!sectionEdit) remapPrinter(section, attempt.source, source);
+    else if (id === sectionEdit.station) section.range = [...sectionEdit.range];
+    else if (section.range && section.range[0] > sectionEdit.range[0]) {
+      section.range = section.range.map(offset => offset + delta);
+    }
+  }
+}
+
+// An empty editor still owns a position between its two neighbouring stations.
+export function stationRange(attempt, station) {
+  const sections = [...tasks.map(task => attempt.tasks[task.id]), attempt.printer];
+  const index = station === 'bracket' ? tasks.length : tasks.findIndex(task => task.id === station);
+  const stored = sections[index]?.range;
+  const source = attempt.source;
+  const before = sections[index - 1]?.range;
+  const after = sections[index + 1]?.range;
+  if (stored && (!before || before[1] < stored[0]) && (!after || stored[1] < after[0])) return stored;
+  // Older saves could lose the range when a student deleted or renamed a line.
+  if ((index > 0 && !before) || (index < sections.length - 1 && !after)) {
+    const repair = repairLines.find(item => item.id === station);
+    const row = repair && repairRow(source, repair);
+    if (row == null) return null;
+    const lines = source.split('\n');
+    let first = row;
+    if (station === 'conversion' || station === 'indent') {
+      const preceding = station === 'conversion' ? /^\s*price\s*=/ : /^\s*if\b/;
+      if (!row || !preceding.test(lines[row - 1])) return null;
+      first--;
+    }
+    const start = lines.slice(0, first).reduce((offset, line) => offset + line.length + 1, 0);
+    const end = start + lines.slice(first, row + 1).join('\n').length;
+    if (sections.some((part, i) => i !== index && part.range && start <= part.range[1] && end >= part.range[0])) return null;
+    return [start, end];
+  }
+  const start = before ? before[1] + 1 : 0;
+  const end = after ? after[0] - 1 : source.length - Number(source.endsWith('\n'));
+  if (start > end || (before && source[start - 1] !== '\n') || (after && source[end] !== '\n')) return null;
+  return [start, end];
 }
