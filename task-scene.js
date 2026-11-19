@@ -15,10 +15,10 @@ const stations = {
 };
 const inspectionQuestions = {
   indent: 'When should this notice appear?',
-  bracket: 'How does the printer know where its instruction ends?',
+  bracket: 'Look at the last print line. How is it different from the example?',
   conversion: 'What does Python get when you type a quantity?',
   name: 'Look at the line that prints the total. Does the name it uses match the name from the calculation?',
-  operator: 'Look at the calculation. Would it give the right total for this many items at this price?',
+  operator: 'Look at the calculation. Does its total match the handwritten receipt?',
 };
 export function currentOrderRun(attempt) {
   const last=attempt.runs.at(-1);
@@ -108,7 +108,7 @@ export function judge(run, price, quantity) {
     ];
   return [
     'ok',
-    `This receipt matches. ${total === 0n ? 'The empty order skipped the order notice.' : `The customer owes ${total}.`}`,
+    `Yes! This receipt matches. ${total === 0n ? 'The empty order skipped the order notice.' : `The customer owes ${total}.`}`,
   ];
 }
 export function nextOrder(attempt) {
@@ -159,7 +159,7 @@ export function investigationGoal(attempt, current, customer, question) {
 }
 const repairProgress = {
   indent: 'Python got past the order notice.',
-  bracket: 'The till starts now.',
+  bracket: 'Python can now read the last print line.',
   conversion: 'The calculation ran this time.',
   name: 'We have a printed total now.',
   operator: 'That total matches the order.',
@@ -172,7 +172,12 @@ function confirmedRepair(attempt, record, target) {
   if (!previous || previous.price !== record.price || previous.quantity !== record.quantity || typeof previous.printed !== 'string') return;
   const [before] = judge(previous, previous.price, previous.quantity);
   const order = ['indent', 'bracket', 'conversion', 'name', 'operator', 'ok'];
-  if (order.includes(before) && order.indexOf(target) > order.indexOf(before)) return before;
+  if (!order.includes(before) || order.indexOf(target) <= order.indexOf(before)) return;
+  const repair = repairLines.find(item => item.id === before);
+  const oldRow = repairRow(previous.source, repair);
+  const newRow = repairRow(record.source, repair);
+  if (oldRow === null || newRow === null) return;
+  if (previous.source.split('\n')[oldRow] !== record.source.split('\n')[newRow]) return before;
 }
 function needsRepairReply(attempt, repair) {
   return repair === 'conversion' ? !attempt.notes.conversion?.trim() : !attempt.repairReplies[repair]?.sent;
@@ -349,7 +354,7 @@ export function openOrder(
     const [target, message] = judge(record, record.price, record.quantity);
     const repair = confirmedRepair(attempt, record, target);
     if (repair && needsRepairReply(attempt, repair) && (!station || station === repair)) {
-      const context = repairProgress[repair] + ' ';
+      const context = `Yes! You fixed this line. ${repairProgress[repair]} `;
       if (repair === 'conversion') ask(EXPLANATIONS.find(item => item.id === repair), record, context);
       else {
         const saved = attempt.repairReplies[repair] ??= {text: '', sent: false};

@@ -26,15 +26,15 @@ export const CASES = [
 export const TOOLBOX = ['(', ')', '[', ']', ':', ',', '"', '+', '-', '*', '/', '=', '==', '>', '<', 'int', 'str', 'input', 'print', 'price', 'quantity', 'total', '    '];
 
 export const repairQuestions = {
-  indent: 'How does Python know when to print the order notice?',
-  bracket: 'How does Python know where the printer’s instruction ends?',
-  name: 'Why does the name in the print line need to match the name used for the total?',
-  operator: 'Why does your calculation give the right price for the whole order?',
+  indent: 'When does Python run the line inside “if total > 0”?',
+  bracket: 'Why do we need a ) at the end of the print line?',
+  name: 'Why do we use the same name, total, on both lines?',
+  operator: 'Why do we multiply the price by the number of items?',
 };
 
 export const EXPLANATIONS = [
-  { id: 'conversion', title: 'Inputs and calculation', questions: ['When the customer typed 3, what did input() give the till?', 'Why did the quantity need to be a number for the calculation?'] },
-  { id: 'indent', title: 'The zero order', questions: ['What total printed for the empty order?', 'Which messages appeared below that total?', 'Compare this receipt with the one for two items. Which message is missing, and why did the final message still print?'] }
+  { id: 'conversion', title: 'Inputs and calculation', questions: ['When you type 3, does input() give Python text or a number?', 'Why do we need the quantity as a number to find the total?'] },
+  { id: 'indent', title: 'The zero order', questions: ['What total printed when you ordered 0 items?', 'What printed below that total?', 'Look at the receipt for 2 items. Name the message that disappeared for 0 items. Why did “Debug check complete” still print?'] }
 ];
 
 export const TESTS = [
