@@ -28,7 +28,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
 
     '<div class="shop-hud"><button id="room-bag" class="satchel-access">'+art('satchel',28,25)+'<span>Detective bag</span></button><button id="case-folder" class="satchel-access">'+art('folder',28,25)+'<span>Case folder</span></button><section class="shop-goal" role="status" aria-label="Current objective"><small id="quest-stage"></small><strong id="quest-title"></strong><span id="shop-goal"></span></section></div>'+
     '<div class="interaction-prompt" hidden><button id="use-object"><kbd aria-hidden="true"></kbd><span></span></button><span id="locked-hint" hidden>Read the rule book first</span></div>'+
-    '<span id="walk-guide" class="page-announcement">Walk with the arrow keys or tap the floor. Press Enter or tap the action when an object is within reach.</span><span id="walk-status" class="page-announcement" role="status"></span></div><section class="detective-choices" hidden aria-labelledby="detective-choices-title"><strong id="detective-choices-title">Your choices</strong><div><button id="owner-order"></button></div></section><section id="printer-chat" aria-label="Detective reply" hidden></section>';
+    '<span id="walk-guide" class="page-announcement">Use the arrow keys or tap the floor to walk. When you’re close, press Enter or tap the action button.</span><span id="walk-status" class="page-announcement" role="status"></span></div><section class="detective-choices" hidden aria-labelledby="detective-choices-title"><strong id="detective-choices-title">Your choices</strong><div><button id="owner-order"></button></div></section><section id="printer-chat" aria-label="Detective reply" hidden></section>';
   illustrate(room);
   id('owner-line').onclick=()=>finishSpeech(id('owner-line'));
   const tools=document.createElement('dialog');
@@ -145,8 +145,8 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const choices=[];
     const choice=(text,fn)=>choices.push([text,fn]);
     if(screen==='greeting' || screen==='arrival'){
-      title='Meet the owner';goal='Hear what happened.';
-      message ||= screen==='arrival' ? `Good morning, Detective ${a.identity.firstName.trim()}! Come talk to me at the counter.` : ['Thanks for coming to my shop.','I had to write a receipt by hand this morning.','Can you find out what went wrong?'];
+      title='Meet the owner';goal=screen==='arrival'?'Walk up to the counter.':'Hear what happened.';
+      message ||= screen==='arrival' ? `Come a little closer, Detective ${a.identity.firstName.trim()}!` : ['Thanks for coming to my shop.','I had to write a receipt by hand this morning.','Can you find out what went wrong?'];
       if(a.printer.tourStop>=0){
         if(screen==='greeting')message=`Let’s go back to the ${stops[a.printer.tourStop][1].toLowerCase()}.`;
         choice('Continue the tour',()=>travel(a.printer.tourStop,false));
@@ -190,6 +190,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     for(const control of ['worn-bag','room-bag','case-folder'])id(control).hidden=guiding;
     id('shop-intro').parentElement.hidden=walking;const pages=Array.isArray(message)?message:message.split(/(?<=[.!?])\s+(?=[A-Z])/);
     speak(id('owner-line'), pages[pageIndex] ?? pages[0]);
+    id('shop-floor').toggleAttribute('data-arrival',screen==='arrival');
     const inConversation=Boolean(screen && screen!=='arrival' && !walking);
     const more=inConversation && pageIndex+1<pages.length;
     id('shop-floor').toggleAttribute('data-speaking',inConversation || walking);
