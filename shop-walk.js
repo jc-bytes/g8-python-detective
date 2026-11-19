@@ -181,7 +181,7 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     const after=element.getBoundingClientRect();
     return element.animate([{translate:`${before.left-after.left}px ${before.top-after.top}px`},{translate:'0px 0px'}],{duration:reduced.matches?0:duration,easing:'linear'});
   }
-  function home(){owner.removeAttribute('style');stage.classList.remove('with-owner');}
+  function home(){stage.querySelector('[data-current]')?.removeAttribute('data-current');owner.removeAttribute('style');stage.classList.remove('with-owner');}
   draw();
   return {setCharacter(value){
     if (character === value) return;
@@ -191,11 +191,15 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     const station=stations.find(item=>item.id===id);
     cancelTourMotion();stop();
     const from=player.getBoundingClientRect(), ownerFrom=owner.getBoundingClientRect();
-    const distance=Math.abs(x-station.x);
-    facing=x<=station.x?'right':'left';x=station.task?station.x-24:station.x;y=counterStop;lastStation=station;draw();
+    // Tour positions follow the machine itself. Free walking uses its approach point.
+    const stopX=id==='owner'?station.center:station.center-14;
+    const distance=Math.abs(x-stopX);
+    facing=x<=stopX?'right':'left';x=stopX;y=counterStop;lastStation=station;draw();
+    stage.querySelector('[data-current]')?.removeAttribute('data-current');
     if(id==='owner')home();
     else{
-      const ownerX=station.x+(station.x>370?-30:30);
+      const ownerX=clamp(station.center+16,18,462);
+      stage.querySelector(`[data-station-id="${id}"]`).setAttribute('data-current','');
       stage.classList.add('with-owner');
       owner.style.left=((ownerX-18)/480*100)+'%';
       stage.style.setProperty('--speaker-x',(ownerX/480*100)+'%');
@@ -211,7 +215,7 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     }
     if(!reduced.matches)strideFrame=requestAnimationFrame(stride);
     await Promise.allSettled(animations.map(motion=>motion.finished));
-    if(animations===tourAnimations){cancelAnimationFrame(strideFrame);paint(ownerCanvas,'owner');draw();}
+    if(animations===tourAnimations){cancelAnimationFrame(strideFrame);if(id!=='owner')facing='back-right';paint(ownerCanvas,'owner');draw();}
 
   },home(){cancelTourMotion();home();},goTo(id){
     const station=stations.find(item=>item.id===id);
