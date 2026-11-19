@@ -1,3 +1,4 @@
+import { paint } from './shop-art.js';
 import { tasks } from './shop-tasks.js';
 import { CASES, PRINTER_QUESTION, STARTER, TESTS, RULES, EXPLANATIONS, repairQuestions, repairLines, repairRow } from './case.js';
 import { fileStem, keptRun } from './model.js';
@@ -30,6 +31,52 @@ export function caseDisposition(snapshot) {
   return verified ? 'Receipts verified' : 'Open investigation';
 }
 
+// File the same exhibit print in the browser folder and the downloadable report.
+export function exhibitPrint(subject) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 340;
+  canvas.height = 204;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fffdf4';
+  ctx.fillRect(0, 0, 340, 204);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(9, 9, 322, 186);
+  ctx.clip();
+  ctx.fillStyle = '#43625c';
+  ctx.fillRect(9, 9, 322, 186);
+  ctx.fillStyle = '#395651';
+  for (let x = 18; x < 331; x += 38) ctx.fillRect(x, 9, 2, 186);
+  ctx.fillStyle = '#bc9069';
+  ctx.fillRect(9, 145, 322, 50);
+  if (subject === 'receipt') {
+    ctx.translate(170, 100);
+    ctx.rotate(-0.055);
+    ctx.fillStyle = '#514539';
+    ctx.fillRect(-107, -73, 221, 156);
+    ctx.fillStyle = '#fff2ce';
+    ctx.fillRect(-111, -77, 221, 156);
+    ctx.fillStyle = '#55462f';
+    ctx.font = 'bold 15px monospace';
+    ctx.fillText('COUNTER RECEIPT', -90, -46);
+    ctx.fillRect(-91, -35, 179, 1);
+    ctx.font = 'italic 24px Georgia, serif';
+    ctx.fillText('3 notebooks', -91, -2);
+    ctx.fillText('6 each', -91, 24);
+    ctx.fillRect(-91, 33, 179, 1);
+    ctx.fillText('Total   18', -91, 62);
+  } else {
+    const sprite = document.createElement('canvas');
+    sprite.width = subject === 'printer' ? 46 : 40;
+    sprite.height = 32;
+    paint(sprite, subject);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sprite, (340 - sprite.width * 4) / 2, 29, sprite.width * 4, 128);
+  }
+  ctx.restore();
+  return canvas.toDataURL('image/png');
+}
+
 export function reportSections(snapshot) {
   const sections = [];
   const heading = title => sections.push({title, entries: []});
@@ -41,12 +88,21 @@ export function reportSections(snapshot) {
   if (assessment) {
     heading('Statement of the store owner');
     entry('quote', '“A customer brought me three notebooks. Each one cost 6. The till gave me no receipt. I wrote one by hand for 18.”');
+    sections.at(-1).entries.push({kind:'exhibit',subject:'receipt',value:'Owner’s handwritten receipt',detail:'Three notebooks at 6 each. Total 18.'});
     heading('Detective’s findings');
     const first = snapshot.runs[0];
     if (!first) note('The till has yet to be tested. The owner’s handwritten receipt is the first lead.');
     else {
       label('Earliest test on file');
-      if (first.error) { note('The till stopped with this error.'); code(first.error.trim().split('\n').at(-1)); }
+      if (first.error) {
+        const frame = [...first.error.matchAll(/File "student_order\.py", line (\d+)/g)].at(-1);
+        const row = frame ? Number(frame[1]) - 1 : -1;
+        const repair = repairLines.find(item => repairRow(first.source,item) === row);
+        const error = first.error.trim().split('\n').at(-1);
+        if (repair) sections.at(-1).entries.push({kind:'exhibit',subject:repair.id==='bracket'?'printer':repair.id,
+          value:CASES.find(item => item.id===repair.id).object,detail:`The till stopped on line ${row+1}.`,sample:first.source.split('\n')[row],error});
+        else { note('The till stopped with this error.'); code(error); }
+      }
       else { note('The till produced this record.'); code(first.printed ?? first.stdout ?? ''); }
     }
     for (const repair of repairLines) {
@@ -54,9 +110,12 @@ export function reportSections(snapshot) {
       const original = STARTER.split('\n')[before];
       const revised = after === null ? null : snapshot.source.split('\n')[after];
       if (revised === original) continue;
-      label(CASES.find(item => item.id === repair.id).object);
-      if (revised === null) note('See the full till listing in Exhibit 02.');
-      else { note('Recovered line'); code(original); note('Line now in the till'); code(revised); }
+      const subject = repair.id==='bracket'?'printer':repair.id;
+      const existing = sections.at(-1).entries.find(item => item.subject===subject && item.sample===original);
+      if (existing) Object.assign(existing,{original,revised});
+      else sections.at(-1).entries.push({kind:'exhibit',subject,
+        value:CASES.find(item => item.id===repair.id).object,original,revised});
+
     }
     if (caseDisposition(snapshot) === 'Receipts verified') {
       label('Finding at the counter');
@@ -143,7 +202,23 @@ export function createReport(snapshot, filedAt = new Date()) {
   ];
   for (const section of reportSections(snapshot)) {
     content.push({text: section.title, pageBreak: section.title.startsWith('Exhibit 02') && snapshot.mode === 'assessment' ? 'before' : undefined, headlineLevel: 1, font: 'Serif', fontSize: 15, bold: true, color: '#24564b', margin: [0, 12, 0, 5]});
-    for (const {kind, value} of section.entries) {
+    for (const exhibit of section.entries) {
+      const {kind,value} = exhibit;
+      if (kind === 'exhibit') {
+        const lines = [{text:value,font:'Serif',bold:true,fontSize:13,margin:[0,0,0,4]}];
+        if (exhibit.detail) {
+          lines.push({text:exhibit.detail});
+          if (exhibit.error) lines.push({text:exhibit.sample,font:'Mono',preserveLeadingSpaces:true},{text:exhibit.error,font:'Mono'});
+        }
+        if (exhibit.original !== undefined) {
+          if (!exhibit.error) lines.push({text:'Recovered line',bold:true}, {text:exhibit.original,font:'Mono',preserveLeadingSpaces:true});
+          lines.push(exhibit.revised === null ? {text:'See the full till listing in Exhibit 02.'} :
+            {stack:[{text:'Line now in the till',bold:true},{text:exhibit.revised,font:'Mono',preserveLeadingSpaces:true}],margin:[0,5,0,0]});
+        }
+        content.push({table:{widths:[110,'*'],body:[[{image:exhibitPrint(exhibit.subject),width:110},{stack:lines}]]},
+          layout:'lightHorizontalLines',margin:[0,5,0,9]});
+        continue;
+      }
       if (kind === 'code' || kind === 'quote') {
         const quote = kind === 'quote';
         content.push({table:{widths:['*'],body:[[{text:value || ' ', font:quote ? 'Serif' : 'Mono', italics:quote, fontSize:quote ? 13 : 10, preserveLeadingSpaces:true,

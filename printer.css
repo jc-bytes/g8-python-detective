@@ -425,3 +425,9 @@ dialog.bound-book {
 .menu-storage {margin-top:18px;padding-top:15px;border-top:1px solid #c6b89a}.menu-storage p {margin:2px 0;font-size:14px}.backup-actions {margin-top:10px}.backup-actions .file-button {display:flex;align-items:center}
 .menu-pages footer {border-top:1px solid #d4c7ac;margin-top:12px;text-align:right}#settings #clear-data {min-height:44px;background:transparent;border:0;color:#853d2f;text-decoration:underline;font-size:13px}
 @media(max-width:380px){.menu-pages{padding:14px 12px 6px}#settings .menu-cover{padding:14px}.menu-routes button,.backup-actions :is(button,label){padding:8px}}
+
+.file-exhibit {display:grid;grid-template-columns:minmax(100px,27%) minmax(0,1fr);align-items:start;gap:16px;margin:12px 0 18px;padding:12px 0;border-block:1px solid #cbbda2}
+.file-exhibit img {width:100%;display:block;border:1px solid #c4b99e;box-shadow:1px 2px 0 #cbbda2}
+.file-exhibit h5 {margin:0 0 6px;font:bold 17px Georgia,serif;color:#244c42}
+.file-exhibit pre {margin:4px 0 8px}
+@media(max-width:520px){.file-exhibit {grid-template-columns:minmax(0,1fr);gap:10px}.file-exhibit img {width:138px;max-width:100%}}

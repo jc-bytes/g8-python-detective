@@ -4,7 +4,7 @@ import { setupPrinter } from './printer-scene.js';
 import { CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, TOOLBOX, EXPLANATIONS } from './case.js';
 import { newAttempt, updateSource, insertCodePiece, placeEvidence, recordRun, keptRun, validateAttempt, fileStem } from './model.js';
 import { PythonRunner } from './runtime.js';
-import { downloadBlob, filingDate, caseDisposition, reportSections, submissionFiles } from './export.js';
+import { exhibitPrint, downloadBlob, filingDate, caseDisposition, reportSections, submissionFiles } from './export.js';
 
 const byId = id => document.getElementById(id);
 const dialog = byId('work-dialog');
@@ -512,7 +512,34 @@ function openSubmission(opener) {
     if (title.startsWith('Exhibit 01')) section.open = true;
     summary.textContent = title;
     section.append(summary);
-    for (const {kind, value} of entries) {
+    for (const exhibit of entries) {
+      const {kind,value} = exhibit;
+      if (kind === 'exhibit') {
+        const figure = document.createElement('figure');
+        figure.className = 'file-exhibit';
+        const image = document.createElement('img');
+        image.src = exhibitPrint(exhibit.subject);
+        image.alt = '';
+        const caption = document.createElement('figcaption');
+        const add = (tag,text) => {
+          const part = document.createElement(tag);
+          part.textContent = text;
+          caption.append(part);
+        };
+        add('h5',value);
+        if (exhibit.detail) {
+          add('p',exhibit.detail);
+          if (exhibit.error) { add('pre',exhibit.sample); add('pre',exhibit.error); }
+        }
+        if (exhibit.original !== undefined) {
+          if (!exhibit.error) { add('strong','Recovered line'); add('pre',exhibit.original); }
+          if (exhibit.revised === null) add('p','See the full till listing in Exhibit 02.');
+          else { add('strong','Line now in the till'); add('pre',exhibit.revised); }
+        }
+        figure.append(image,caption);
+        section.append(figure);
+        continue;
+      }
       const line = document.createElement(kind === 'code' ? 'pre' : kind === 'label' ? 'strong' : kind === 'quote' ? 'blockquote' : 'p');
       line.textContent = value;
       section.append(line);
