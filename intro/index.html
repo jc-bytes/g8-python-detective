@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Python Detective · Field notes</title>
+<style>
+:root{color-scheme:light;--paper:#fcf6e6;--ink:#203d39;--line:#c8bea6;--rust:#943e25;--mono:'Courier Prime',ui-monospace,monospace}*{box-sizing:border-box}body{margin:0;color:var(--ink);background:#e8e2d2;font:18px/1.5 'Source Sans 3',system-ui,sans-serif}main{max-width:1150px;margin:clamp(0px,3vw,42px) auto;background:var(--paper);border:1px solid var(--line);box-shadow:4px 6px 0 #d3cbb8}header,footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px clamp(16px,4vw,56px)}header{border-bottom:1px solid var(--line)}header b{font:700 1.25rem Georgia,serif}header span,.tag,figcaption{font:700 .8rem/1.5 var(--mono);color:var(--rust);letter-spacing:.08em;text-transform:uppercase}article{min-height:460px;padding:clamp(25px,5vw,70px);display:grid;grid-template-columns:1.05fr 1fr;align-items:center;gap:clamp(20px,5vw,70px)}h1{font:normal clamp(2.3rem,5vw,4.5rem)/1.02 Georgia,serif;letter-spacing:-.045em;margin:.2em 0 .4em}p{max-width:42ch}figure{min-width:0;margin:0;background:#f2e9d3;padding:clamp(18px,3vw,36px);border:1px solid var(--line);border-top:5px solid var(--ink)}pre{background:#203d39;color:#fff2d3;padding:16px;overflow-x:auto;font:1em/1.65 var(--mono);border-radius:3px}code{font-family:var(--mono)}footer{border-top:1px solid var(--line);flex-wrap:wrap}button,a{font:inherit;font-weight:650}button{padding:9px 17px;background:transparent;color:var(--ink);border:1px solid var(--ink);border-radius:5px;cursor:pointer}#next{background:var(--ink);color:white}button:disabled{opacity:.4;cursor:default}:focus-visible{outline:3px solid #086fc2;outline-offset:3px}a{color:var(--rust)}canvas{display:block;width:90%;max-width:360px;margin:12px auto;image-rendering:pixelated}.progress{height:4px;background:#d8d1be}.progress i{display:block;height:100%;background:var(--rust)}@media(max-width:720px){main{margin:0}article{grid-template-columns:1fr;min-height:0}header span{font-size:.66rem}footer{padding:14px}pre{font-size:.9em}} 
+</style></head><body><main><header><b>Python Detective</b><span>Grade 8 · Field notes</span></header><div class="progress"><i></i></div><article id="slide" aria-labelledby="title"></article><footer><button id="prev">← Back</button><span id="count" role="status"></span><button id="next">Next →</button></footer></main>
+<script>
+const slides = [
+  {
+    topic: 'Butterfly club', title: 'Can Python count your cards?',
+    text: 'Imagine you’re making a program to count your butterfly cards. You tell it how many packs you have. It tells you how many cards you have altogether.',
+    caption: 'Your first test', art: true,
+    prompt: 'You have two packs with four cards in each. Count them yourself first. What number should your program show?'
+  },
+  {
+    topic: 'Before the investigation', title: "Two packs hold eight cards.",
+    text: 'Eight. Now you have a way to check the program. If it shows six, you know something went wrong.',
+    caption: "Count the cards", code: "4 + 4 = 8"
+  },
+  {
+    topic: 'Function calls', title: 'Make words appear.',
+    text: 'In Python, print() shows something on the screen. Put the message between quotes. The opening ( and closing ) tell Python where the print instruction starts and ends.',
+    caption: 'A message for the club', code: 'print("Cards packed!")',
+    prompt: 'Read the message out loud. Which part will appear on the screen?'
+  },
+  {
+    topic: 'Function calls', title: "The screen shows your message.",
+    text: 'You will see Cards packed! The quotes tell Python where the words begin and end. Only the words and the exclamation mark appear.',
+    caption: "On the screen", code: "Cards packed!"
+  },
+  {
+    topic: 'Variable names', title: 'Give the count a name.',
+    text: 'Read cards = 8 as “remember 8 under the name cards.” That name is a variable. You can use it again when you want the count.',
+    caption: 'Two print instructions', code: 'cards = 8\nprint(cards)\nprint("cards")',
+    prompt: 'The first print uses a name. The second has quotes. What will each one show?'
+  },
+  {
+    topic: 'Variable names', title: "One line shows a number. The other shows a word.",
+    text: 'The first shows 8. Python looks up the name cards and finds 8. The second shows the word cards because the quotes tell Python to use those letters as text.',
+    caption: "On the screen", code: "8\ncards"
+  },
+  {
+    topic: 'Input and whole numbers', title: 'What happens when you type 2?',
+    text: 'input() asks a question and reads what you type as text. You can turn the text “2” into the whole number 2 with int(). Then Python can count with it.',
+    caption: 'One more pack', code: 'answer = input("How many packs? ")\npacks = int(answer)\nprint(packs + 1)',
+    prompt: 'You type 2. One more pack arrives. What number will you see?'
+  },
+  {
+    topic: 'Input and whole numbers', title: "Two packs become three.",
+    text: 'You typed 2. At first Python has the written digit “2”. int() turns it into a number Python can add to. One more pack makes 3.',
+    caption: "Follow the 2", code: "You type       2\nPython reads   \"2\"\nint() gives    2\n2 + 1 gives    3"
+  },
+  {
+    topic: 'Multiplication', title: 'Count four cards for each pack.',
+    text: 'With two packs, you can count 4 + 4. Python can do the same job with 2 * 4. The star means “multiply.”',
+    caption: 'At the packing table', code: 'packs = 2\ncards = packs * 4\nprint(cards)',
+    prompt: 'Imagine you pack one more set of cards. The first line now says packs = 3. How many cards should Python count?'
+  },
+  {
+    topic: 'Multiplication', title: "Three packs hold twelve cards.",
+    text: 'It should show 12. There are four cards in each of three packs. Count them in groups: 4, 8, 12.',
+    caption: "Count the cards", code: "4 + 4 + 4 = 12"
+  },
+  {
+    topic: 'Conditions and indentation', title: 'Do we need a label?',
+    text: 'The sign > means “greater than.” Python asks, “Is the number of cards greater than zero?” If yes, it runs the line that starts four spaces in. Those spaces are called indentation.',
+    caption: 'Packing instructions', code: 'cards = 4\nif cards > 0:\n    print("Label the pack")\nprint("Count finished")',
+    prompt: 'With four cards, both messages appear. Imagine the first line says cards = 0. Which message will you still see?'
+  },
+  {
+    topic: 'Conditions and indentation', title: "The last message still prints.",
+    text: 'You will still see Count finished. Zero cards means there is no pack to label, so Python skips the line with four spaces. The last line starts back at the left edge and runs either way.',
+    caption: "On the screen with zero cards", code: "Count finished"
+  },
+  {
+    topic: 'Debugging', title: 'Spot the swapped letters.',
+    text: 'Python looks for each name exactly as you wrote it. If it cannot find a name, it stops and shows a NameError. The last line of the error tells you which name to check.',
+    caption: 'A count that will not print', code: 'cards = 8\nprint(cadrs)',
+    prompt: 'Point to the name on each line. Which two letters switched places?'
+  },
+  {
+    topic: 'Debugging', title: "Use the same name twice.",
+    text: 'The r and d switched places. Change cadrs to cards on the print line. Run it again. If you see 8, the program found the name you gave it.',
+    caption: "The repaired code", code: "cards = 8\nprint(cards)"
+  },
+  {
+    topic: 'Evidence', title: 'Tell someone what you saw.',
+    text: 'Input is what you type. Output is what the program shows. Use one row from your notes to explain a test in your own words.',
+    caption: 'Your notes', code: 'Packs typed    Cards shown\n     3              12\n     0               0',
+    prompt: 'Pick a row. Finish the sentence: “I typed ___ packs and saw ___ cards because ___.”'
+  },
+  {
+    topic: 'Evidence', title: "Explain one row at a time.",
+    text: 'For the first row, you could say, “I typed 3 packs and saw 12 cards because each pack held four.” For the second, “I typed 0 packs and saw 0 cards because there were no packs to count.”',
+    caption: "Your notes", code: "Packs typed    Cards shown\n     3              12\n     0               0"
+  },
+  {
+    topic: 'The Broken Order', title: 'Try it in the shop.',
+    text: 'Walk up to the owner with the arrow keys, or tap the floor. Press Enter or tap the action button to talk. The owner will tell you what went wrong.',
+    caption: 'Your first check',
+    prompt: 'Before you run the order, guess what the receipt should say. Run it and compare. If you get stuck, walk to the rule book for an example. After a fix, try the same order again. Tell the owner what changed. Save your case report when you finish.', game: true
+  }
+];
+const slide = document.querySelector('#slide');
+const prev = document.querySelector('#prev'), next = document.querySelector('#next');
+let index = 0;
+function element(tag,text,parent){const node=document.createElement(tag);node.textContent=text;parent.append(node);return node;}
+function butterfly(parent){
+ const canvas=document.createElement('canvas');canvas.width=96;canvas.height=54;canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Pixel drawing of an orange and cream butterfly with outstretched wings');parent.append(canvas);
+ const ctx=canvas.getContext('2d');ctx.fillStyle='#d9cfb4';for(let x=0;x<96;x+=5)for(let y=0;y<54;y+=5)ctx.fillRect(x,y,1,1);
+ const wing=['XX          ','XooXX       ','Xo*ooXX     ',' XoooooXX   ',' X*ooXoooXX ','  XXooXXoooX','    XXXoooXX','     XooXooX','    Xo*ooXX ','    XoooX   ','     XXX    '];const colors={X:'#293f37',o:'#ca7937','*':'#fff3c8'};
+ wing.forEach((line,y)=>[...line].forEach((value,x)=>{if(colors[value]){ctx.fillStyle=colors[value];ctx.fillRect(11+x*3,7+y*3,3,3);ctx.fillRect(82-x*3,7+y*3,3,3);}}));ctx.fillStyle=colors.X;ctx.fillRect(46,18,4,17);ctx.fillRect(43,15,3,3);ctx.fillRect(50,15,3,3);
+}
+function show(i){
+ index=i;const s=slides[i];slide.replaceChildren();const left=element('section','',slide);element('span',s.topic,left).className='tag';const title=element('h1',s.title,left);title.id='title';element('p',s.text,left);
+ const fig=element('figure','',slide);element('figcaption',s.caption,fig);if(s.art)butterfly(fig);if(s.code)element('code',s.code,element('pre','',fig));if(s.prompt)element('p',s.prompt,fig);
+ if(s.game){const link=element('a','Open The Broken Order →',fig);link.href='https://jc-bytes.github.io/g8-python-detective/';}
+ prev.disabled=i===0;next.disabled=i===slides.length-1;document.querySelector('#count').textContent=`Slide ${i+1} of ${slides.length}`;document.querySelector('.progress i').style.width=`${(i+1)/slides.length*100}%`;
+}
+function move(step){const target=index+step;if(target>=0&&target<slides.length)location.hash=String(target+1);}
+function readSlide(){const n=Number(location.hash.slice(1));show(Number.isInteger(n)&&n>=1&&n<=slides.length?n-1:0);}
+prev.onclick=()=>move(-1);next.onclick=()=>move(1);window.addEventListener('hashchange',readSlide);document.addEventListener('keydown',e=>{if(e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;if(['ArrowRight','ArrowLeft'].includes(e.key)){e.preventDefault();move(e.key==='ArrowRight'?1:-1);}});readSlide();
+</script></body></html>
