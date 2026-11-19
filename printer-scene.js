@@ -93,7 +93,8 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   const till=['The till is the machine I use for a sale.','It works out what you owe and prints your receipt.',firstStop];
   let currentAttempt,screen='',line='',pageIndex=0,stopIndex=0,repeatVisit=false,motion=0;
   function needsWelcome(){const a=getAttempt();return !a.printer.tourDone && !a.runs.length && !a.revision;}
-  const walk=setupWalk(room,{canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu')closeConversation();}});
+  function awaitingOwner(){const a=getAttempt();return needsWelcome() && !a.printer.metOwner && a.printer.tourStop<0;}
+  const walk=setupWalk(room,{awaitingOwner,canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu')closeConversation();}});
   function show(which,text=''){
     screen=which;line=text;pageIndex=0;id('shop-intro').hidden=false;refresh();
     if(!room.hidden && screen!=='walking')focusReply();
@@ -109,6 +110,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     screen='arrival';line='Come talk to me at the counter, Detective.';id('shop-intro').hidden=false;refresh();
   }
   function meetOwner(){
+    if(awaitingOwner() && canEdit()){getAttempt().printer.metOwner=true;save();}
     show(needsWelcome()?'greeting':'menu');
   }
   async function travel(index,revisit){
@@ -187,7 +189,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     id('detective-name').textContent='Detective '+a.identity.firstName.trim();id('quest-stage').textContent=touring?'The broken order':`Task ${number}`;id('quest-title').textContent=title;id('shop-goal').textContent=goal;
     const walking=screen==='walking';id('shop-floor').toggleAttribute('data-escorting',walking || screen==='stop' || screen==='objects');
     const guiding=id('shop-floor').hasAttribute('data-escorting');
-    for(const control of ['worn-bag','room-bag','case-folder'])id(control).hidden=guiding;
+    for(const control of ['worn-bag','room-bag','case-folder'])id(control).hidden=guiding || awaitingOwner();
     id('shop-intro').parentElement.hidden=walking;const pages=Array.isArray(message)?message:message.split(/(?<=[.!?])\s+(?=[A-Z])/);
     speak(id('owner-line'), pages[pageIndex] ?? pages[0]);
     id('shop-floor').toggleAttribute('data-arrival',screen==='arrival');
@@ -203,5 +205,5 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   id('case-folder').onclick=e=>openFolder(e.currentTarget);
   id('worn-bag').onclick=id('room-bag').onclick=()=>bag();
-  return {refresh,useBag,restoreBag,needsWelcome,inviteToTalk,walkToCounter:()=>walk.focus()};
+  return {refresh,useBag,restoreBag,needsWelcome,awaitingOwner,inviteToTalk,walkToCounter:()=>walk.focus()};
 }

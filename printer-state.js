@@ -6,7 +6,7 @@ export function printerState(source) {
   const unique = start >= 0 && source.indexOf(originalPrinterLine, start + 1) < 0
     && (start === 0 || source[start - 1] === '\n')
     && ['', '\n'].includes(source.charAt(start + originalPrinterLine.length));
-  return { range: unique ? [start, start + originalPrinterLine.length] : null, tourStop: -1, tourDone: false, dialogue: 0, visitedBook: false, page: -1, reply: '', replied: false, result: null };
+  return { range: unique ? [start, start + originalPrinterLine.length] : null, metOwner: false, tourStop: -1, tourDone: false, dialogue: 0, visitedBook: false, page: -1, reply: '', replied: false, result: null };
 }
 
 // Follow a single edit before, after, or inside the strip. Ask for a new
@@ -35,6 +35,7 @@ export function restorePrinter(value, source) {
   if (!value || typeof value !== 'object') return clean;
   const r = value.range;
   clean.range = Array.isArray(r) && r.length===2 && r.every(Number.isSafeInteger) && r[0]>=0 && r[0]<=r[1] && r[1]<=source.length ? r : null;
+  clean.metOwner = value.metOwner === true || (value.metOwner === undefined && (value.replied === true || value.dialogue > 0));
   clean.tourDone = value.tourDone === true;
   if(Number.isInteger(value.tourStop) && value.tourStop>=0 && value.tourStop<6)clean.tourStop=value.tourStop;
   clean.visitedBook = value.visitedBook === true;

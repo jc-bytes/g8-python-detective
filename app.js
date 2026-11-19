@@ -118,7 +118,12 @@ function statusFor(station) {
 let atMaterials = false;
 let entered = false;
 const settings = byId('settings');
-byId('game-menu').onclick = () => settings.showModal();
+function updateCaseMenu() {
+  const inShop = entered && mode === 'assessment' && !atMaterials;
+  byId('other-objects').hidden = !inShop || printer.awaitingOwner();
+  byId('menu-export').hidden = mode === 'practice' || printer.awaitingOwner();
+}
+byId('game-menu').onclick = () => { updateCaseMenu(); settings.showModal(); };
 byId('menu-close').onclick = () => settings.close();
 byId('menu-export').onclick = () => { settings.close(); openSubmission(byId('game-menu')); };
 byId('edit-identity').onclick = () => {
@@ -139,9 +144,9 @@ function refresh() {
   if (mode === 'assessment' && !attempt.identity.firstName.trim()) entered = false;
   byId('arrival').hidden = entered;
   byId('edit-identity').hidden = !entered || mode === 'practice';
-  byId('menu-export').hidden = mode === 'practice';
   byId('practice-panel').hidden = mode !== 'practice';
-  byId('shop-scene').hidden = byId('other-objects').hidden = !entered || mode === 'practice' || atMaterials;
+  byId('shop-scene').hidden = !entered || mode === 'practice' || atMaterials;
+  updateCaseMenu();
   byId('existing-case').hidden = !entered || mode === 'practice' || !atMaterials;
   document.querySelector('.workspace').hidden = mode === 'practice';
 

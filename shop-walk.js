@@ -17,7 +17,7 @@ const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
 const rearLimit = x => x >= counterEdge ? counterStop : wallStop;
 const keys = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1],a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]};
 
-export function setupWalk(room,{canRead,read,inspect,inspectTask,talk,leaveOwner}){
+export function setupWalk(room,{awaitingOwner,canRead,read,inspect,inspectTask,talk,leaveOwner}){
   const stage=room.querySelector('.shop-stage'), floor=room.querySelector('[data-art="shop"]');
   const player=room.querySelector('.shop-detective'), sprite=player.querySelector('canvas');
   const action=room.querySelector('#use-object'), status=room.querySelector('#walk-status');
@@ -29,6 +29,7 @@ export function setupWalk(room,{canRead,read,inspect,inspectTask,talk,leaveOwner
   const held=new Map();
   const handlers={book:read,printer:inspect,owner:talk};
   function availableStation(station){
+    if(awaitingOwner())return station.id==='owner';
     return !station.task || room.querySelector(`[data-station-id="${station.id}"]`).hasAttribute('data-available');
   }
   function withinReach(station){
@@ -42,7 +43,7 @@ export function setupWalk(room,{canRead,read,inspect,inspectTask,talk,leaveOwner
     player.style.bottom=((168-y)/168*100)+'%';
     paint(sprite,'detective',facing,phase,character);
     const wasAtOwner=near?.id==='owner';
-    near=lastStation && withinReach(lastStation) ? lastStation : stations.filter(station=>withinReach(station) && availableStation(station))
+    near=lastStation && availableStation(lastStation) && withinReach(lastStation) ? lastStation : stations.filter(station=>withinReach(station) && availableStation(station))
       .sort((a,b)=>Math.abs(a.center-x)-Math.abs(b.center-x))[0];
     if(wasAtOwner && near?.id!=='owner')leaveOwner();
     const prompt=conversationAction || (!stage.hasAttribute('data-speaking') && room.querySelector('#counter-talk').hidden && near);
