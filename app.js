@@ -3,7 +3,7 @@ import { playSound, setupSoundToggle } from './sound.js';
 import { paint } from './shop-art.js';
 import { currentOrderRun, judge, stationHint, studentDiagnostic } from './task-scene.js';
 import { setupPrinter } from './printer-scene.js';
-import { CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, TOOLBOX, EXPLANATIONS } from './case.js';
+import { allowsRepair, repairReminder, CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, TOOLBOX, EXPLANATIONS } from './case.js';
 import { newAttempt, updateSource, insertCodePiece, placeEvidence, recordRun, keptRun, validateAttempt, fileStem } from './model.js';
 import { PythonRunner } from './runtime.js';
 import { exhibitPrint, downloadBlob, filingDate, caseDisposition, reportSections, submissionFiles } from './export.js';
@@ -100,6 +100,12 @@ function rememberSource() {
 
 function setSource(source, remember = true, sectionEdit) {
   if (!canEdit()) return false;
+  if (mode === 'assessment' && remember && source !== STARTER && !allowsRepair(attempt.source, source)) {
+    const feedback = byId('repair-limit') || byId('toolbox-message');
+    if (feedback) feedback.textContent = repairReminder;
+    return false;
+  }
+  if (byId('repair-limit')) byId('repair-limit').textContent = '';
   try {
     if (remember && source !== attempt.source) rememberSource();
     updateSource(attempt, source, sectionEdit);
@@ -360,11 +366,13 @@ function openDesk(opener) {
   if (mode !== 'assessment') return;
   if(printer.needsWelcome()){if(dialog.open)dialog.close();showShop();printer.inviteToTalk();return;}
   openDialog('The repair desk', 'One program / Three real tests', `
-    <div class="desk-grid"><section><label for="desk-code">Your complete Python program</label><p class="small">Find and repair five errors. Type your edits, or use the shared toolbox below. Nothing chooses the line or the repair for you. Tab inserts four spaces.</p><div class="editor-wrap"><pre class="line-numbers" id="line-numbers" aria-hidden="true"></pre><textarea id="desk-code" class="code-editor" rows="12" maxlength="20000" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></div><div class="button-row"><button id="desk-undo">Undo last code edit</button><button id="reset-case">Reset the program</button></div><section id="toolbox"><h3>Code pieces</h3><p>These are general Python pieces, not a list of answers. Select text to replace it, or choose a cursor position. Select a piece, then insert it. You may also drag a piece onto the editor to insert it at your last chosen cursor position.</p><div class="pieces" id="desk-pieces"></div><button id="insert-piece">Insert selected piece</button><p id="toolbox-message" class="panel-status" aria-live="polite">Choose where to edit. No code position is selected for you.</p></section><p class="small">Changing the code does not change an earlier run. Run your tests again when you finish editing.</p></section>
+    <div class="desk-grid"><section><label for="desk-code">Your complete Python program</label><p class="small">Repair the five errors on the supplied lines. Type your change or use the toolbox. Tab inserts four spaces.</p><small id="repair-limit" role="status"></small><div class="editor-wrap"><pre class="line-numbers" id="line-numbers" aria-hidden="true"></pre><textarea id="desk-code" aria-describedby="repair-limit" class="code-editor" rows="12" maxlength="20000" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></div><div class="button-row"><button id="desk-undo">Undo last code edit</button><button id="reset-case">Reset the program</button></div><section id="toolbox"><h3>Code pieces</h3><p>These are general Python pieces, not a list of answers. Select text to replace it, or choose a cursor position. Select a piece, then insert it. You may also drag a piece onto the editor to insert it at your last chosen cursor position.</p><div class="pieces" id="desk-pieces"></div><button id="insert-piece">Insert selected piece</button><p id="toolbox-message" class="panel-status" aria-live="polite">Choose where to edit. No code position is selected for you.</p></section><p class="small">Changing the code does not change an earlier run. Run your tests again when you finish editing.</p></section>
     <section><h3>Test an order</h3><p class="small">Run one order at a time. Does the printed total equal price × quantity? A positive total should print “Order recorded”. A zero total should skip that line. Every receipt should end with “Debug check complete”. If Python stops early, check the error and try again. Keep the result you want to report.</p><div class="test-buttons" id="test-buttons"></div><div class="button-row" style="margin-top:10px"><button id="stop-run">Stop run</button></div><p id="runtime-status" class="panel-status" aria-live="polite"></p><div id="run-history" aria-label="Actual run results"></div></section></div><section id="explanations"><h3>Your two explanations</h3><p class="small">Explain your decisions in complete sentences using your own words. These are the required written explanations. Board notes are optional.</p></section><div class="station-bottom button-row"><button id="desk-review" class="primary">Review submission files</button><button id="desk-return">Return to investigation</button></div>`, opener);
   byId('desk-code').value = attempt.source;
   byId('desk-code').readOnly = conflict;
-  byId('desk-code').addEventListener('input', event => setSource(event.target.value));
+  byId('desk-code').addEventListener('input', event => {
+    if (!setSource(event.target.value)) event.target.value = attempt.source;
+  });
   byId('desk-code').addEventListener('keydown', insertTab);
   byId('desk-code').addEventListener('scroll', event => { byId('line-numbers').scrollTop = event.target.scrollTop; });
   for (const eventName of ['select', 'pointerup', 'keyup', 'input']) {

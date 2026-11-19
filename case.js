@@ -58,3 +58,45 @@ export function repairRow(source, repair){
   const rows=lines.flatMap((line,index)=>!line.trimStart().startsWith('#') && repair.pattern.test(line)?[index]:[]);
   return rows.length===1?rows[0]:null;
 }
+
+// Each repair stays inside the statement printed on the worksheet. Accept
+// unfinished tokens while typing and let Python judge whether a repair works.
+const inputLine = /^\s*(?:price|quantity)\s*=\s*(?:(?:i|in|int|s|st|str|f|fl|flo|floa|float)\s*\(?\s*)?input\s*\(\s*["'](?:Price|Quantity): ?["']\s*\)?\s*\)?\s*$/;
+const repairShapes = [
+  inputLine, inputLine,
+  /^\s*total\s*=\s*\w*\s*[+*/%\-]{0,2}\s*\w*\s*$/,
+  /^\s*print\s*\(\s*["']Total:["']\s*,\s*\w*\s*\)?\s*$/,
+  /^\s*if\s+\w+\s*[<>=!]{0,2}\s*\d*\s*:?\s*$/,
+  /^\s*print\s*\(\s*["']Order recorded["']\s*\)?\s*$/,
+  /^\s*print\s*\(\s*["']Debug check complete["']\s*\)?\s*$/,
+];
+const suppliedLines = STARTER.trimEnd().split('\n');
+export const repairReminder = 'Fix the line that is already here. You can change its pieces or spaces. Extra instructions won’t be added.';
+
+export function allowsRepair(before, after) {
+  if (before === after) return true;
+  const oldLines = before.split('\n');
+  const newLines = after.split('\n');
+  // Older saves may contain extra lines. Students can remove them, and the
+  // original saved work remains available until they choose to edit it.
+  if (newLines.length > oldLines.length) return false;
+  const standardLayout = oldLines.length === 7 || (oldLines.length === 8 && oldLines.at(-1) === '');
+  if (standardLayout && newLines.length !== oldLines.length) return false;
+  return newLines.every((line, i) => {
+    if (line === oldLines[i]) return true;
+    if (standardLayout && i >= suppliedLines.length) return line === '';
+    if (line.trim() === '') return true;
+    if (line.length > 256) return false;
+    const slots = standardLayout ? [i] : suppliedLines.map((_, index) => index);
+    // Permit clearing a line and retyping the supplied statement from scratch.
+    return slots.some(slot => {
+      if (repairShapes[slot].test(line)) return true;
+      const original = suppliedLines[slot];
+      const trimmed = line.trimStart();
+      for (let end = 0; end < original.length; end++) {
+        if (repairShapes[slot].test(trimmed + original.slice(end))) return true;
+      }
+      return false;
+    });
+  });
+}

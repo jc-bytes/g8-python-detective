@@ -1,7 +1,7 @@
 import { playSound } from './sound.js';
 import { speak, finishSpeech } from './speech.js';
 import { tasks } from './shop-tasks.js';
-import { openOrder, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun } from './task-scene.js';
+import { openOrder, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun, requiredStation } from './task-scene.js';
 import { chapterIndex, createRuleBook } from './rule-book.js';
 import { setupWalk } from './shop-walk.js';
 import { TOOLBOX } from './case.js';
@@ -172,6 +172,8 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   function inspectTask(station,opener){
     if(needsWelcome()){inviteToTalk();return;}
+    const propId = station === 'bracket' ? 'printer' : station;
+    if (!room.querySelector(`[data-station-id="${propId}"][data-available]`)) return;
     screen='';line='';walk.home();id('shop-floor').removeAttribute('data-escorting');id('shop-intro').hidden=true;
     if(opener===id('owner-order') || !opener?.isConnected)opener=id('start-order');
     if(station==='bracket')visit();
@@ -186,7 +188,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     const customer=nextOrder(a), question=pendingQuestion(a);
     const finished=!customer && !question;
     const review=()=>openFolder(id('start-order'));
-    const order=()=>inspectTask(null,id('start-order'));
+    const order=closeConversation;
     const [number,taskTitle,taskHint]=investigationGoal(a,last,customer,question);
     let message=line,title=taskTitle,goal=taskHint;
     const touring=needsWelcome() || ['walking','stop','objects'].includes(screen);
@@ -232,18 +234,18 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
       if(finished)goal='Review your case report.';
     }
     if (destination && destination.revision !== a.revision) destination = null;
-    const target = !touring && (destination?.station || (!last && !a.runs.length ? 'bracket' : null));
+    const target = !touring && !finished && (destination?.station || requiredStation(a,last,customer,question));
     const propId = target === 'bracket' ? 'printer' : target;
     for (const prop of room.querySelectorAll('.shop-prop')) {
       const marked = prop.dataset.stationId === propId;
       prop.toggleAttribute('data-next-stop', marked);
+      prop.toggleAttribute('data-available', !touring && (marked || prop.dataset.stationId === 'book'));
       if (marked && destination) {
         const label = prop.querySelector('span').textContent;
         goal = destination.chapter ? `Walk to the Rule book. Read “${destination.chapter}”.` : `Walk to the ${label}. Press Enter to inspect it.`;
         title = destination.chapter ? 'Read the rule book' : `Next stop: ${label}`;
       }
     }
-    for(const task of tasks)room.querySelector(`[data-station-id="${task.id}"]`).toggleAttribute('data-available',true);
     id('detective-name').textContent='Detective '+a.identity.firstName.trim();id('quest-stage').textContent=touring?'The broken order':`Task ${number}`;id('quest-title').textContent=title;id('shop-goal').textContent=goal;
     const walking=screen==='walking';id('shop-floor').toggleAttribute('data-escorting',walking || screen==='stop' || screen==='objects' || screen==='assignment');
     const guiding=id('shop-floor').hasAttribute('data-escorting');

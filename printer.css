@@ -445,3 +445,6 @@ dialog.bound-book {
 
 #station-scope {display:block;font-size:.8rem;font-weight:normal}
 #calculator-reference code {overflow-wrap:anywhere}
+
+.shop-stage:not([data-escorting]) .shop-prop:not([data-available]) {cursor:default}
+.shop-stage:not([data-escorting]) .shop-prop:not([data-available]) > span {opacity:.72}

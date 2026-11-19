@@ -177,6 +177,27 @@ function confirmedRepair(attempt, record, target) {
 function needsRepairReply(attempt, repair) {
   return repair === 'conversion' ? !attempt.notes.conversion?.trim() : !attempt.repairReplies[repair]?.sent;
 }
+// The floor uses the same evidence and outstanding replies as the objective.
+export function requiredStation(attempt, current, customer, question) {
+  const run = current || attempt.runs.at(-1);
+  if (typeof run?.printed !== 'string' || !/^\d{1,8}$/.test(run.price) || !/^\d{1,8}$/.test(run.quantity)) return 'bracket';
+  const [target] = judge(run, run.price, run.quantity);
+  const repair = current && confirmedRepair(attempt, current, target);
+  if (repair && needsRepairReply(attempt, repair)) return repair;
+  if (target === 'name' && run.nameComparison === 'calculator') return 'operator';
+  if (target === 'ok') return customer || question ? 'bracket' : null;
+  if (target) return target;
+  if (Object.hasOwn(stations, run.station)) return run.station;
+  const frame = [...run.error.matchAll(/File "student_order\.py", line (\d+)/g)].at(-1);
+  if (frame && run.source === attempt.source) {
+    const offset = run.source.split('\n').slice(0, Number(frame[1]) - 1).reduce((n,line) => n + line.length + 1, 0);
+    for (const id of Object.keys(stations)) {
+      const range = stationRange(attempt, id);
+      if (range && range[0] <= offset && offset <= range[1]) return id;
+    }
+  }
+  return 'bracket';
+}
 export function openOrder(
   station,
   opener,
@@ -198,7 +219,7 @@ export function openOrder(
   openDialog(
     stations[station] || 'Shop counter',
     'Customer order',
-    `<div class="order-work"><section class="order-machine"><p class="order-slip"><strong>Handwritten receipt</strong> · 3 notebooks at 6 each = 18</p><label for="order-code">Till program</label><textarea id="order-code" spellcheck="false" rows="8" maxlength="20000"></textarea><form id="order-form"><label>Price<input id="order-price" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><label>Quantity<input id="order-quantity" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><button class="primary">Run order</button></form><div id="order-result" aria-live="polite"></div></section><aside class="order-owner"><canvas width="36" height="60" aria-hidden="true"></canvas><div><strong>Store owner</strong><p id="order-dialogue" aria-live="polite" aria-atomic="true"></p></div><section class="order-choices" aria-label="Your choices"><button id="reveal-line" type="button">Show full line</button><label id="order-reply" hidden><span id="reply-label">Your reply</span><small id="reply-hint">Answer in a complete sentence.</small><textarea rows="3" maxlength="3000" aria-labelledby="reply-label" aria-describedby="reply-hint"></textarea><span id="reply-feedback"></span></label><button id="order-next" hidden></button></section></aside></div>`,
+    `<div class="order-work"><section class="order-machine"><p class="order-slip"><strong>Handwritten receipt</strong> · 3 notebooks at 6 each = 18</p><label for="order-code">Till program</label><textarea id="order-code" aria-describedby="repair-limit" spellcheck="false" rows="8" maxlength="20000"></textarea><small id="repair-limit" role="status"></small><form id="order-form"><label>Price<input id="order-price" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><label>Quantity<input id="order-quantity" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><button class="primary">Run order</button></form><div id="order-result" aria-live="polite"></div></section><aside class="order-owner"><canvas width="36" height="60" aria-hidden="true"></canvas><div><strong>Store owner</strong><p id="order-dialogue" aria-live="polite" aria-atomic="true"></p></div><section class="order-choices" aria-label="Your choices"><button id="reveal-line" type="button">Show full line</button><label id="order-reply" hidden><span id="reply-label">Your reply</span><small id="reply-hint">Answer in a complete sentence.</small><textarea rows="3" maxlength="3000" aria-labelledby="reply-label" aria-describedby="reply-hint"></textarea><span id="reply-feedback"></span></label><button id="order-next" hidden></button></section></aside></div>`,
     opener,
   );
   const editor = id('order-code'),
@@ -227,9 +248,9 @@ export function openOrder(
   if (station) {
     const note = document.createElement('small');
     note.id = 'station-scope';
-    note.textContent = 'You edit this section. Run order tests the whole till.';
+    note.textContent = 'Fix the supplied lines here. Run order tests the whole till.';
     editor.labels[0].after(note);
-    editor.setAttribute('aria-describedby', note.id);
+    editor.setAttribute('aria-describedby', 'station-scope repair-limit');
   }
   const nextCustomer=nextOrder(attempt);
   let requested=(!attempt.runs.length || !attempt.order.quantity || !attempt.order.price) ? nextCustomer : null;
@@ -298,11 +319,11 @@ export function openOrder(
     if (destination) pointTo(destination, chapter, returnStation);
     action('Back to the shop', () => id('work-dialog').close());
   }
-  function needsReading(station) {
-    const topic = ruleTopics[station];
+  function needsReading(questionStation) {
+    const topic = ruleTopics[questionStation];
     if (attempt.printer.chaptersRead.includes(chapterIndex(topic))) return false;
     speak(dialogue, `${dialogue.textContent} Read “${topic}” at the rule book stand, then come back with your answer.`);
-    backToShop('book', topic, station);
+    backToShop('book', topic, station || questionStation);
     return true;
   }
   function show(record, opening = false) {
@@ -478,7 +499,7 @@ export function openOrder(
       if (getAttempt() !== attempt || !canEdit()) return;
       const test = TESTS.find((t) => t.price === price && t.quantity === quantity);
       const record = recordRun(attempt, outcome, source, revision, test?.id || 'custom');
-      Object.assign(record, { price, quantity, printed: outcome.printed });
+      Object.assign(record, { price, quantity, printed: outcome.printed, station });
       if (test && (!isFinalOrder(test) || station === 'bracket') && judge(record, price, quantity)[0] === 'ok') {
         attempt.kept[test.id] = record.id;
         playSound('handle_coins');

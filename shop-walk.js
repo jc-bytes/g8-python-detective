@@ -31,7 +31,7 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
   const handlers={book:read,printer:inspect,owner:talk};
   function availableStation(station){
     if(ownerOnly())return station.id==='owner';
-    return !station.task || room.querySelector(`[data-station-id="${station.id}"]`).hasAttribute('data-available');
+    return station.id === 'owner' || room.querySelector(`[data-station-id="${station.id}"]`).hasAttribute('data-available');
   }
   function withinReach(station){
     const left=Math.min(station.x,station.center-16), right=station.center+16;
@@ -175,6 +175,13 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     const prop=event.target.closest('[data-station-id]');
     const station=stations.find(item=>item.id===prop?.dataset.stationId && availableStation(item));
     stage.focus({preventScroll:true});
+    if (prop && !station) {
+      const goal = room.querySelector('#shop-goal');
+      const next = room.querySelector('[data-next-stop] > span');
+      if (next && !goal.textContent.startsWith('Walk to')) goal.textContent = `Walk to the marked ${next.textContent}, then press Enter.`;
+      status.textContent = goal.textContent;
+      return;
+    }
     if(station && withinReach(station))use(station);
     else if(station)walk(station.x,counterStop,station);
     else walk(targetX,targetY);
