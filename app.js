@@ -2,10 +2,11 @@ import { setupAnswerField } from './answer-field.js';
 import { playSound, setupSoundToggle } from './sound.js';
 import { paint } from './shop-art.js';
 import { currentOrderRun, judge, stationHint, studentDiagnostic } from './task-scene.js';
+import { restoreBackpack, suppliedCode } from './backpack.js';
 import { chapterIndex } from './rule-book.js';
 import { setupPrinter } from './printer-scene.js';
-import { allowsRepair, repairReminder, CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, TOOLBOX, EXPLANATIONS } from './case.js';
-import { newAttempt, updateSource, insertCodePiece, placeEvidence, recordRun, keptRun, validateAttempt, fileStem } from './model.js';
+import { allowsRepair, repairReminder, CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, EXPLANATIONS } from './case.js';
+import { newAttempt, updateSource, placeEvidence, recordRun, keptRun, validateAttempt, fileStem } from './model.js';
 import { PythonRunner } from './runtime.js';
 import { exhibitPrint, downloadBlob, filingDate, caseDisposition, reportSections, submissionFiles } from './export.js';
 
@@ -21,7 +22,6 @@ let attempt = loadAttempt(mode);
 let selection = null;
 let running = false;
 let conflict = false;
-let undoHistory = [];
 let exportedUrls = [];
 let dialogOpener;
 const runner = new PythonRunner(message => {
@@ -30,7 +30,7 @@ const runner = new PythonRunner(message => {
 });
 
 const printer = setupPrinter({
-  getAttempt: () => attempt, save, canEdit, edit: (source, range) => setSource(source, true, range), openDialog, openFolder: openSubmission,
+  getAttempt: () => attempt, save, canEdit, edit: setSource, openDialog, openFolder: openSubmission,
   visit: () => {
     if (canEdit() && !attempt.inspected.includes('bracket')) {
       attempt.inspected.push('bracket');
@@ -94,27 +94,29 @@ function save() {
   }
 }
 
-function rememberSource() {
-  undoHistory.push(attempt.source);
-  if (undoHistory.length > 30) undoHistory.shift();
-}
-
 function assignedUnreadChapter() {
   const route = attempt.printer.destination;
   if (mode === 'assessment' && route?.station === 'book' && route.revision === attempt.revision && !attempt.printer.chaptersRead.includes(chapterIndex(route.chapter))) return route.chapter;
 }
 
-function setSource(source, remember = true, sectionEdit) {
+function setSource(source, sectionEdit) {
   if (!canEdit() || assignedUnreadChapter()) return false;
-  if (mode === 'assessment' && remember && source !== STARTER && !allowsRepair(attempt.source, source)) {
-    const feedback = byId('repair-limit') || byId('toolbox-message');
+  const station = sectionEdit?.station;
+  const section = station && source.slice(...sectionEdit.range);
+  const backpack = station && restoreBackpack(station, sectionEdit.backpack, section);
+  const restoring = station && sectionEdit.restore && section === suppliedCode(station);
+  if (mode === 'assessment' && (!station || (!backpack && !restoring && !allowsRepair(attempt.source, source)))) {
+    const feedback = byId('repair-limit');
     if (feedback) feedback.textContent = repairReminder;
     return false;
   }
   if (byId('repair-limit')) byId('repair-limit').textContent = '';
   try {
-    if (remember && source !== attempt.source) rememberSource();
     updateSource(attempt, source, sectionEdit);
+    if (station) {
+      if (backpack) attempt.backpacks[station] = backpack;
+      else delete attempt.backpacks[station];
+    }
     save();
     refresh();
     return true;
@@ -274,12 +276,6 @@ function refresh() {
   byId('evidence-count').textContent = `${count} / 5 cards attached`;
   byId('board-message').textContent = selection?.kind === 'clue' ? 'Clue selected. Select a board slot to attach it.' : attempt.inspected.length ? `${attempt.inspected.length} clues collected. ${count} cards attached. Select a tray card to place or move it.` : 'No evidence collected yet. Inspect an object in the room.';
   if (byId('desk-code') && document.activeElement !== byId('desk-code')) byId('desk-code').value = attempt.source;
-  if (byId('desk-code')) {
-    const chapter = assignedUnreadChapter();
-    byId('desk-code').readOnly = blocked || Boolean(chapter);
-    if (chapter) byId('repair-limit').textContent = `Read “${chapter}” in the rule book to unlock editing.`;
-    for (const id of ['desk-undo', 'reset-case', 'insert-piece']) byId(id).disabled = blocked || Boolean(chapter);
-  }
   document.querySelectorAll('[data-explanation]').forEach(field => { field.readOnly = blocked; });
   if (byId('line-numbers')) byId('line-numbers').textContent = attempt.source.split('\n').map((line, index) => index + 1).join('\n');
   renderRuns();
@@ -331,77 +327,14 @@ function openStation(caseId, opener) {
   refresh();
 }
 
-function selectPiece(token) {
-  if (!TOOLBOX.includes(token)) return;
-  selection = { kind: 'piece', token };
-  document.querySelectorAll('[data-piece]').forEach(piece => {
-    piece.classList.toggle('selected', piece.dataset.piece === token);
-    piece.setAttribute('aria-pressed', String(piece.dataset.piece === token));
-  });
-  byId('toolbox-message').textContent = `${token === '    ' ? 'Four spaces' : token} selected. Choose a position or select text in the editor, then use Insert selected piece. You decide where it belongs.`;
-}
-
-function applySelectedPiece() {
-  if (!canEdit()) return;
-  if (selection?.kind !== 'piece') {
-    byId('toolbox-message').textContent = 'Select a code piece first.';
-    return;
-  }
-  try {
-    const editor = byId('desk-code');
-    if (editor.dataset.positionChosen !== 'true') {
-      byId('toolbox-message').textContent = 'Choose a cursor position or select text in your program first. The toolbox will not choose a location for you.';
-      return;
-    }
-    const cursor = editor.selectionStart + selection.token.length;
-    const source = insertCodePiece(attempt.source, selection.token, editor.selectionStart, editor.selectionEnd);
-    if (setSource(source)) {
-      editor.value = source;
-      editor.focus();
-      editor.setSelectionRange(cursor, cursor);
-      byId('toolbox-message').textContent = 'Piece inserted exactly where you chose. Run Python to investigate what changed. No repair was checked for you.';
-    }
-  } catch (error) {
-    byId('toolbox-message').textContent = error.message;
-  }
-}
-
-function undoEdit() {
-  if (!canEdit()) return;
-  const source = undoHistory.pop();
-  if (source === undefined) { announce('No earlier code edit is available in this session.'); return; }
-  setSource(source, false);
-}
-
 function openDesk(opener) {
   if (mode !== 'assessment') return;
   if(printer.needsWelcome()){if(dialog.open)dialog.close();showShop();printer.inviteToTalk();return;}
   openDialog('The repair desk', 'One program / Three real tests', `
-    <div class="desk-grid"><section><label for="desk-code">Your complete Python program</label><p class="small">Repair the five errors on the supplied lines. Type your change or use the toolbox. Tab inserts four spaces.</p><small id="repair-limit" role="status"></small><div class="editor-wrap"><pre class="line-numbers" id="line-numbers" aria-hidden="true"></pre><textarea id="desk-code" aria-describedby="repair-limit" class="code-editor" rows="12" maxlength="20000" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></div><div class="button-row"><button id="desk-undo">Undo last code edit</button><button id="reset-case">Reset the program</button></div><section id="toolbox"><h3>Code pieces</h3><p>These are general Python pieces, not a list of answers. Select text to replace it, or choose a cursor position. Select a piece, then insert it. You may also drag a piece onto the editor to insert it at your last chosen cursor position.</p><div class="pieces" id="desk-pieces"></div><button id="insert-piece">Insert selected piece</button><p id="toolbox-message" class="panel-status" aria-live="polite">Choose where to edit. No code position is selected for you.</p></section><p class="small">Changing the code does not change an earlier run. Run your tests again when you finish editing.</p></section>
+    <div class="desk-grid"><section><label for="desk-code">Your complete Python program</label><p class="small" id="desk-guide">Read your program here. To fix a line, go to the marked machine and use your backpack.</p><div class="editor-wrap"><pre class="line-numbers" id="line-numbers" aria-hidden="true"></pre><textarea id="desk-code" readonly aria-describedby="desk-guide" class="code-editor" rows="12" wrap="off"></textarea></div></section>
     <section><h3>Test an order</h3><p class="small">Run one order at a time. Does the printed total equal price × quantity? A positive total should print “Order recorded”. A zero total should skip that line. Every receipt should end with “Debug check complete”. If Python stops early, check the error and try again. Keep the result you want to report.</p><div class="test-buttons" id="test-buttons"></div><div class="button-row" style="margin-top:10px"><button id="stop-run">Stop run</button></div><p id="runtime-status" class="panel-status" aria-live="polite"></p><div id="run-history" aria-label="Actual run results"></div></section></div><section id="explanations"><h3>Your two explanations</h3><p class="small">Explain your decisions in complete sentences using your own words. These are the required written explanations. Board notes are optional.</p></section><div class="station-bottom button-row"><button id="desk-review" class="primary">Review submission files</button><button id="desk-return">Return to investigation</button></div>`, opener);
   byId('desk-code').value = attempt.source;
-  byId('desk-code').readOnly = conflict;
-  byId('desk-code').addEventListener('input', event => {
-    if (!setSource(event.target.value)) event.target.value = attempt.source;
-  });
-  byId('desk-code').addEventListener('keydown', insertTab);
   byId('desk-code').addEventListener('scroll', event => { byId('line-numbers').scrollTop = event.target.scrollTop; });
-  for (const eventName of ['select', 'pointerup', 'keyup', 'input']) {
-    byId('desk-code').addEventListener(eventName, event => {
-      if (document.activeElement === event.target) event.target.dataset.positionChosen = 'true';
-    });
-  }
-  for (const token of TOOLBOX) {
-    const piece = document.createElement('button');
-    piece.className = 'piece';
-    piece.draggable = true;
-    piece.dataset.piece = token;
-    piece.textContent = token === '    ' ? '4 spaces' : token;
-    piece.setAttribute('aria-pressed', 'false');
-    byId('desk-pieces').append(piece);
-  }
-  printer.useBag(selectPiece);
-  byId('insert-piece').addEventListener('click', applySelectedPiece);
   for (const explanation of EXPLANATIONS) {
     const label = document.createElement('label');
     label.className = 'station-note';
@@ -433,12 +366,6 @@ function openDesk(opener) {
   }
   byId('stop-run').disabled = !running;
   byId('stop-run').addEventListener('click', () => runner.stop());
-  byId('desk-undo').addEventListener('click', undoEdit);
-  byId('reset-case').addEventListener('click', () => {
-    if (!canEdit() || !confirm('Download a backup and restore the starter code? Your notes, evidence cards, and earlier runs will stay.')) return;
-    backup();
-    setSource(STARTER);
-  });
   byId('desk-review').addEventListener('click', () => openSubmission(dialogOpener));
   byId('desk-return').addEventListener('click', () => dialog.close());
   refresh();
@@ -638,7 +565,6 @@ function switchMode(nextMode) {
   attempt = loadAttempt(mode);
   if (mode === 'practice') attempt.identity = player;
   selection = null;
-  undoHistory = [];
   announce(mode === 'practice' ? 'Practice is ungraded and saved separately. Your assessed work has not changed.' : 'You are back in your assessed case. Practice answers were not copied here.');
   refresh();
   if (mode === 'practice') byId('practice-code').focus();
@@ -649,8 +575,6 @@ function switchMode(nextMode) {
 document.addEventListener('click', event => {
   const stationButton = event.target.closest('[data-station]');
   if (stationButton) openStation(stationButton.dataset.station, stationButton);
-  const piece = event.target.closest('[data-piece]');
-  if (piece) selectPiece(piece.dataset.piece);
   const clue = event.target.closest('[data-clue-card]');
   if (clue) {
     selection = { kind: 'clue', id: clue.dataset.clueCard };
@@ -681,19 +605,17 @@ function attachClue(destination) {
 }
 
 document.addEventListener('dragstart', event => {
-  const piece = event.target.closest('[data-piece]');
   const clue = event.target.closest('[data-clue-card]');
-  if (piece) { selectPiece(piece.dataset.piece); event.dataTransfer.setData('text/plain', JSON.stringify(selection)); }
-  else if (clue) event.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'clue', id: clue.dataset.clueCard }));
+  if (clue) event.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'clue', id: clue.dataset.clueCard }));
   else if (event.target.id === 'practice-piece') event.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'practice' }));
 });
 document.addEventListener('dragover', event => {
-  const target = event.target.closest('[data-case-slot], #desk-code, #practice-target');
+  const target = event.target.closest('[data-case-slot], #practice-target');
   if (target) { event.preventDefault(); target.classList.add('drag-over'); }
 });
-document.addEventListener('dragleave', event => event.target.closest('[data-case-slot], #desk-code, #practice-target')?.classList.remove('drag-over'));
+document.addEventListener('dragleave', event => event.target.closest('[data-case-slot], #practice-target')?.classList.remove('drag-over'));
 document.addEventListener('drop', event => {
-  const target = event.target.closest('[data-case-slot], #desk-code, #practice-target');
+  const target = event.target.closest('[data-case-slot], #practice-target');
   if (!target) return;
   event.preventDefault();
   target.classList.remove('drag-over');
@@ -702,7 +624,6 @@ document.addEventListener('drop', event => {
     if (text.length > 500) return;
     const payload = JSON.parse(text);
     if (target.dataset.caseSlot && payload.kind === 'clue') { selection = payload; attachClue(target.dataset.caseSlot); }
-    if (target.id === 'desk-code' && payload.kind === 'piece' && TOOLBOX.includes(payload.token)) { selection = payload; applySelectedPiece(); }
     if (target.id === 'practice-target' && payload.kind === 'practice') fixPractice();
   } catch { announce('That item could not be placed. Select a piece or clue, then select its destination.'); }
 });
@@ -753,7 +674,6 @@ byId('restore').addEventListener('change', async event => {
     damagedSave = null;
     settings.close();
     attempt = restored;
-    undoHistory = [];
     save(); refresh();
     announce('Backup restored. Inspect the code, explanations, and run records before continuing.');
   } catch (error) { announce(`Restore failed: ${error.message}`); }
@@ -766,7 +686,6 @@ byId('clear-data').addEventListener('click', () => {
   } catch { announce('Browser storage could not be cleared. Ask your teacher before leaving a shared device.'); return; }
   mode = 'assessment'; entered = false; atMaterials = false; settings.close();
   attempt = newAttempt(mode);
-  undoHistory = [];
   runner.stop();
   byId('save-status').textContent = 'Local work cleared. New changes will be saved.';
   if (dialog.open) dialog.close();
@@ -782,7 +701,6 @@ byId('recover-damaged').addEventListener('click', () => {
   downloadBlob(new Blob([damagedSave.raw], { type: 'application/json' }), 'damaged_python_detective_save.json');
   damagedSave = null;
   attempt = newAttempt(mode);
-  undoHistory = [];
   if (dialog.open) dialog.close();
   save(); refresh();
   announce('A new attempt is ready. Keep the damaged-save download until you know whether its work can be recovered.');
@@ -797,7 +715,6 @@ byId('load-other').addEventListener('click', () => {
   backup();
   attempt = loadAttempt(mode);
   conflict = false;
-  undoHistory = [];
   if (dialog.open) dialog.close();
   refresh();
   announce('Loaded the other tab\'s saved work. Your previous in-memory attempt was offered as a backup download.');

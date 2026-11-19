@@ -448,3 +448,6 @@ dialog.bound-book {
 
 .shop-stage:not([data-escorting]) .shop-prop:not([data-available]) {cursor:default}
 .shop-stage:not([data-escorting]) .shop-prop:not([data-available]) > span {opacity:.72}
+/* The same token colors follow the example from the book to the machine. */
+
+#order-code{white-space:normal;font:inherit;min-height:0;margin:.35rem 0}.pack-code,.pack-example pre{padding:8px;background:#fffdf6;border:1px solid #bba988;border-radius:6px;overflow-x:auto}.pack-line{font:600 .95rem/1.7 monospace;white-space:pre;min-height:1.7em}.pack-token,.pack-piece{font:inherit}.pack-token{padding:2px 3px;min-width:0;min-height:26px;background:#fffaf0;border:1px solid #d6cbb9;border-radius:4px}.pack-tray{margin:.45rem 0}.pack-count,.pack-help{font-size:.84rem}.pack-count{margin-left:.5rem}.pack-pieces,.pack-actions{display:flex;gap:5px;flex-wrap:wrap}.pack-piece,.pack-actions button,.pack-undo{min-height:32px;padding:4px 9px}.pack-piece{font-family:monospace;font-weight:bold;background:#f9eccb}.pack-help{display:block}.pack-actions:not(:empty),.pack-undo{margin-top:4px}.pack-token[aria-pressed=true],.pack-piece[aria-pressed=true]{outline:2px solid #175f64}.pack-example{font-size:.85rem}.pack-example pre{white-space:pre-wrap;margin:.25rem 0}.order-machine #station-scope{display:block}

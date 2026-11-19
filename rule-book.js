@@ -1,3 +1,4 @@
+import { colorCode } from './backpack.js';
 import { playSound } from './sound.js';
 export const ruleTopics = { bracket: 'Function calls', name: 'Names', conversion: 'Input values', operator: 'Calculations', indent: 'Conditions' };
 
@@ -72,6 +73,8 @@ function sketch(canvas,index) {
 
 export function chapterIndex(topic) { return pages.findIndex(([title]) => title === topic); }
 
+export function chapterExample(topic) { return pages[chapterIndex(topic)]?.[2]; }
+
 export function createRuleBook({page,remember}) {
   const dialog=document.createElement('dialog');
   dialog.className='bound-book';
@@ -124,7 +127,7 @@ export function createRuleBook({page,remember}) {
     }else{
       const rule=document.createElement('p');rule.textContent=pages[index][1];left.append(rule);
       right.innerHTML='<h3>Python example</h3><pre><code></code></pre><p class="ink-note"></p>';
-      right.querySelector('code').textContent=pages[index][2];
+      colorCode(right.querySelector('code'),pages[index][2]);
       right.querySelector('.ink-note').textContent=pages[index][3];
       left.dataset.folio=String(2+index*2);
       right.dataset.folio=String(3+index*2);

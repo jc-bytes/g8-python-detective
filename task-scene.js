@@ -1,8 +1,9 @@
 import { sentenceReminder, setupAnswerField } from './answer-field.js';
 import { playSound } from './sound.js';
-import { ruleTopics, chapterIndex } from './rule-book.js';
+import { makeBackpack, fixedSection, inventory } from './backpack.js';
+import { ruleTopics, chapterExample, chapterIndex } from './rule-book.js';
 import { speak, finishSpeech } from './speech.js';
-import { TESTS, EXPLANATIONS, repairReminder, withoutExtraLines, repairQuestions, repairLines, repairRow } from './case.js';
+import { TESTS, EXPLANATIONS, withoutExtraLines, repairQuestions, repairLines, repairRow } from './case.js';
 import { stationRange, tasks } from './shop-tasks.js';
 import { keptRun, recordRun } from './model.js';
 
@@ -37,6 +38,7 @@ export function studentDiagnostic(trace) {
 const transfer = [TESTS[0], TESTS[2], TESTS[1]];
 const id = (key) => document.getElementById(key);
 export function judge(run, price, quantity) {
+  if (Object.hasOwn(stations, run.backpackRetry)) return [run.backpackRetry, 'That spot didn’t fix the line. Select Undo last move, then try a different spot.'];
   const error = run.error.trim().split('\n').at(-1);
   const printed = run.printed.trimEnd();
   const total = BigInt(price) * BigInt(quantity);
@@ -187,6 +189,7 @@ function confirmedRepair(attempt, record, target) {
   const repair = repairLines.find(item => item.id === before);
   const oldRow = repairRow(previous.source, repair);
   const newRow = repairRow(record.source, repair);
+  if (previous.backpackRetry === before && record.station === before && newRow !== null) return before;
   if (oldRow === null || newRow === null) return;
   if (previous.source.split('\n')[oldRow] !== record.source.split('\n')[newRow]) return before;
 }
@@ -237,7 +240,7 @@ export function openOrder(
   openDialog(
     stations[station] || 'Shop counter',
     'Customer order',
-    `<div class="order-work"><section class="order-machine"><p class="order-slip"><strong>Handwritten receipt</strong> · 3 notebooks at 6 each = 18</p><label for="order-code">Till program</label><textarea id="order-code" aria-describedby="repair-limit" spellcheck="false" rows="8" maxlength="20000"></textarea><small id="repair-limit" role="status"></small><form id="order-form"><label>Price<input id="order-price" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><label>Quantity<input id="order-quantity" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><button class="primary">Run order</button></form><div id="order-result" aria-live="polite"></div></section><aside class="order-owner"><canvas width="36" height="60" aria-hidden="true"></canvas><div><strong>Store owner</strong><p id="order-dialogue" aria-live="polite" aria-atomic="true"></p></div><section class="order-choices" aria-label="Your choices"><button id="reveal-line" type="button">Show full line</button><label id="order-reply" hidden><span id="reply-label">Your reply</span><small id="reply-hint">Answer in a complete sentence.</small><textarea rows="3" maxlength="3000" aria-labelledby="reply-label" aria-describedby="reply-hint"></textarea><span id="reply-feedback"></span></label><button id="order-next" hidden></button></section></aside></div>`,
+    `<div class="order-work"><section class="order-machine"><p class="order-slip"><strong>Handwritten receipt</strong> · 3 notebooks at 6 each = 18</p><strong id="station-label"></strong><small id="station-scope"></small><section id="order-code" tabindex="-1" aria-labelledby="station-label"></section><small id="repair-limit" role="status"></small><form id="order-form"><label>Price<input id="order-price" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><label>Quantity<input id="order-quantity" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" required></label><button class="primary">Run order</button></form><div id="order-result" aria-live="polite"></div></section><aside class="order-owner"><canvas width="36" height="60" aria-hidden="true"></canvas><div><strong>Store owner</strong><p id="order-dialogue" aria-live="polite" aria-atomic="true"></p></div><section class="order-choices" aria-label="Your choices"><button id="reveal-line" type="button">Show full line</button><label id="order-reply" hidden><span id="reply-label">Your reply</span><small id="reply-hint">Answer in a complete sentence.</small><textarea rows="3" maxlength="3000" aria-labelledby="reply-label" aria-describedby="reply-hint"></textarea><span id="reply-feedback"></span></label><button id="order-next" hidden></button></section></aside></div>`,
     opener,
   );
   const editor = id('order-code'),
@@ -253,27 +256,19 @@ export function openOrder(
   const range = station ? stationRange(attempt, station) : [0, attempt.source.length];
   const topic = ruleTopics[station];
   const needsChapter = topic && !attempt.printer.chaptersRead.includes(chapterIndex(topic));
-  const codeLocked = !range || Boolean(needsChapter);
-  editor.readOnly = codeLocked;
   const [start, initialEnd] = range || [0, 0];
-  let end = initialEnd;
-  editor.value = attempt.source.slice(start, end);
-  if (station) {
-    editor.labels[0].textContent = stations[station] + ' code';
-    editor.rows = Math.max(2, Math.min(8, editor.value.split('\n').length));
+  let end = initialEnd, paused = false, busy = false;
+  const readSection = () => attempt.source.slice(start,end);
+  function canPlace() {
+    if (!range || needsChapter || paused || busy || !canEdit()) return false;
+    const run = attempt.runs.at(-1);
+    if (tooManyLines(readSection())) return true;
+    if (typeof run?.printed !== 'string' || !/^\d{1,8}$/.test(run.price) || !/^\d{1,8}$/.test(run.quantity)) return false;
+    const [target] = judge(run,run.price,run.quantity);
+    return target === station || (!target && requiredStation(attempt,currentOrderRun(attempt),nextOrder(attempt),pendingQuestion(attempt)) === station);
   }
-  if (!range) {
-    editor.readOnly = true;
-    editor.placeholder = 'This section could not be located in your saved program. Open the full till program at the owner’s counter to review it.';
-  }
-
-  if (station) {
-    const note = document.createElement('small');
-    note.id = 'station-scope';
-    note.textContent = needsChapter ? `To edit this code, read “${topic}” in the rule book first.` : 'Fix the supplied lines here. Run order tests the whole till.';
-    editor.labels[0].after(note);
-    editor.setAttribute('aria-describedby', 'station-scope repair-limit');
-  }
+  id('station-label').textContent = stations[station] + ' code';
+  id('station-scope').textContent = !range ? 'Open the full program in your case folder to review this saved section.' : needsChapter ? `To edit this code, read “${topic}” in the rule book first.` : '';
   const nextCustomer=nextOrder(attempt);
   let requested=(!attempt.runs.length || !attempt.order.quantity || !attempt.order.price) ? nextCustomer : null;
   function updateOrderSlip() {
@@ -291,7 +286,7 @@ export function openOrder(
   }
   function clear() {
     pointTo(null);
-    editor.readOnly = codeLocked;
+    paused = false;
     updateCleanup();
     form.hidden = false;
     result.replaceChildren();
@@ -302,57 +297,26 @@ export function openOrder(
   const lineLimit = stationLineLimit(station);
   const tooManyLines = value => lineLimit && value.split('\n').length > lineLimit;
   const oldLinesMessage = `This machine uses ${lineLimit} ${lineLimit === 1 ? 'line' : 'lines'}. Delete the extra lines in your saved code before you run it.`;
-  if (tooManyLines(editor.value)) id('repair-limit').textContent = oldLinesMessage;
-  editor.onbeforeinput = event => {
-    if (lineLimit && ['insertLineBreak', 'insertParagraph'].includes(event.inputType)) {
-      event.preventDefault();
-      id('repair-limit').textContent = repairReminder;
-    }
-  };
-  editor.oninput = () => {
-    const source = attempt.source.slice(0, start) + editor.value + attempt.source.slice(end);
-    if (editor.readOnly || editor.disabled) {
-      editor.value = attempt.source.slice(start, end);
-      return;
-    }
-    if (tooManyLines(editor.value)) {
-      const previous = attempt.source.slice(start, end);
-      if (editor.value.split('\n').length >= previous.split('\n').length) {
-        editor.value = previous;
-        id('repair-limit').textContent = tooManyLines(previous) ? oldLinesMessage : repairReminder;
-        return;
-      }
-    }
-    if (edit(source, station ? {station, range: [start, start + editor.value.length]} : null)) {
-      end = start + editor.value.length;
-      clear();
-    } else editor.value = attempt.source.slice(start, end);
-  };
-  let updateCleanup = () => {};
-  if (tooManyLines(editor.value)) {
-    const first = station === 'bracket' ? 6 : tasks.find(task => task.id === station).first;
-    const cleanup = document.createElement('button');
-    cleanup.type = 'button';
-    cleanup.textContent = 'Remove extra lines';
-    cleanup.hidden = editor.readOnly || withoutExtraLines(editor.value, first, lineLimit) === null;
-    id('repair-limit').after(cleanup);
-    cleanup.onclick = () => {
-      if (editor.readOnly || editor.disabled || !canEdit()) return;
-      const cleaned = withoutExtraLines(editor.value, first, lineLimit);
-      if (cleaned === null) return;
-      editor.value = cleaned;
-      editor.oninput();
-      editor.focus();
-    };
-    updateCleanup = () => { cleanup.hidden = editor.readOnly || withoutExtraLines(editor.value, first, lineLimit) === null; };
+  function writeSection(text, backpack, restore = false) {
+    if (!canPlace()) return false;
+    const source = attempt.source.slice(0,start) + text + attempt.source.slice(end);
+    if (!edit(source,{station,range:[start,start+text.length],backpack,restore})) return false;
+    end = start + text.length;
+    clear();
+    return true;
   }
-  function insert(token) {
-    if (editor.disabled || editor.readOnly || !canEdit()) return;
-    editor.setRangeText(token, editor.selectionStart, editor.selectionEnd, 'end');
-    editor.oninput();
-    editor.focus();
+  const pack = makeBackpack(editor,{station,read:readSection,saved:()=>attempt.backpacks[station],
+    write:(text,state)=>writeSection(text,state,!state),allowed:canPlace,example:needsChapter ? '' : chapterExample(topic)});
+  const cleanup = document.createElement('button');
+  cleanup.type='button';cleanup.textContent='Remove extra lines';id('repair-limit').after(cleanup);
+  const first = station === 'bracket' ? 6 : tasks.find(task=>task.id===station).first;
+  function updateCleanup() {
+    pack.render();
+    cleanup.hidden = !canPlace() || !tooManyLines(readSection()) || withoutExtraLines(readSection(),first,lineLimit)===null;
   }
-  useBag(insert);
+  cleanup.onclick=()=>{const text=withoutExtraLines(readSection(),first,lineLimit);if(text!==null)writeSection(text,null);};
+  updateCleanup();
+  useBag(()=>pack.focus());
   for (const key of ['price', 'quantity']) {
     const input = id('order-' + key);
     input.value = attempt.order[key];
@@ -380,7 +344,7 @@ export function openOrder(
   }
   function backToShop(destination, chapter, returnStation = station) {
     if (destination === 'book') {
-      editor.readOnly = true;
+      paused = true;
       form.hidden = true;
       updateCleanup();
     }
@@ -409,7 +373,7 @@ export function openOrder(
     const [target, message] = judge(record, record.price, record.quantity);
     const repair = confirmedRepair(attempt, record, target);
     if (repair && needsRepairReply(attempt, repair) && (!station || station === repair)) {
-      editor.readOnly = true;
+      paused = true;
       updateCleanup();
       form.hidden = true;
       if (target === 'ok') output('Printed receipt', record.printed);
@@ -426,11 +390,16 @@ export function openOrder(
       }
       return;
     }
-    if (tooManyLines(editor.value)) {
+    if (tooManyLines(readSection())) {
       if (needsChapter) {
         speak(dialogue, `Read “${topic}” in the rule book. Then come back to fix these lines.`);
         backToShop('book', topic);
       } else speak(dialogue, oldLinesMessage);
+      return;
+    }
+    if (record.backpackRetry === station) {
+      output('Try again', 'Check this line in the rule book example.');
+      speak(dialogue, message);
       return;
     }
     output('Printed receipt', record.printed || 'No receipt printed.');
@@ -455,7 +424,7 @@ export function openOrder(
           const code = document.createElement('code');
           code.textContent = record.source.split('\n')[calculationRow];
           reference.append('Line you saw at the calculator', document.createElement('br'), code);
-          editor.labels[0].before(reference);
+          id('station-label').before(reference);
         }
         if (attempt.printer.chaptersRead.includes(chapterIndex('Names'))) {
           speak(dialogue, 'Compare the calculator line above with the ledger code. Edit the ledger, then select Run order.');
@@ -558,7 +527,7 @@ export function openOrder(
       save();
       refresh();
       show(record);
-      if (pending && !needsRepairReply(attempt, repair) && target !== 'ok' && !tooManyLines(editor.value)) {
+      if (pending && !needsRepairReply(attempt, repair) && target !== 'ok' && !tooManyLines(readSection())) {
         speak(dialogue, `Oh no, there’s another ${record.error ? 'error' : 'problem with the receipt'}! Let’s fix it. ${dialogue.textContent}`);
       }
       if (!reply.hidden) field.focus(); else next.focus();
@@ -570,7 +539,7 @@ export function openOrder(
   else if (!returnToPrinter(nextCustomer)) speak(dialogue, entryPrompt());
   form.onsubmit = async (e) => {
     e.preventDefault();
-    if (tooManyLines(editor.value)) {
+    if (tooManyLines(readSection())) {
       id('repair-limit').textContent = oldLinesMessage;
       editor.focus();
       return;
@@ -580,7 +549,15 @@ export function openOrder(
       source = attempt.source,
       revision = attempt.revision;
     if (![price, quantity].every((v) => /^\d{1,8}$/.test(v))) return;
-    const controls = [editor, ...form.elements];
+    const backpack = attempt.backpacks[station];
+    if (backpack?.moves.length && inventory(station, readSection(), backpack).length) {
+      speak(dialogue, 'You still have pieces in your backpack. Place them, then select Run order.');
+      pack.focus();
+      return;
+    }
+    const retryPlacement = backpack?.moves.length && !fixedSection(station, readSection());
+    busy = true;
+    const controls = [...form.elements];
     controls.forEach((el) => (el.disabled = true));
     clear();
     speak(dialogue, 'Running the order…');
@@ -590,6 +567,7 @@ export function openOrder(
       const test = TESTS.find((t) => t.price === price && t.quantity === quantity);
       const record = recordRun(attempt, outcome, source, revision, test?.id || 'custom');
       Object.assign(record, { price, quantity, printed: outcome.printed, station });
+      if (retryPlacement) record.backpackRetry = station;
       if (test && (!isFinalOrder(test) || station === 'bracket') && judge(record, price, quantity)[0] === 'ok') {
         attempt.kept[test.id] = record.id;
         playSound('handle_coins');
@@ -600,6 +578,8 @@ export function openOrder(
     } catch (err) {
       speak(dialogue, err.message);
     } finally {
+      busy = false;
+      if (editor.isConnected) updateCleanup();
       controls.forEach((el) => (el.disabled = false));
     }
   };

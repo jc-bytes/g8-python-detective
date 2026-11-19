@@ -1,9 +1,10 @@
-import { restoreTasks, trackTaskEdits } from './shop-tasks.js';
+import { restoreTasks, trackTaskEdits, stationRange } from './shop-tasks.js';
+import { restoreBackpack } from './backpack.js';
 import { printerState, restorePrinter } from './printer-state.js';
 import { CASE_VERSION, CASES, SIMPLIFIED_STARTER, STARTER, TESTS, PRACTICE_SOURCE, TOOLBOX } from './case.js';
 
 export function newAttempt(mode = 'assessment') {
-  return { starterRevision: 3, repairReplies: {}, order: {price:"", quantity:""}, tasks: restoreTasks(null,mode === 'assessment' ? STARTER : PRACTICE_SOURCE), printer: printerState(mode === 'assessment' ? STARTER : PRACTICE_SOURCE), version: CASE_VERSION, mode, identity: { firstName: '', lastName: '', group: '', character: 'boy' }, source: mode === 'practice' ? PRACTICE_SOURCE : STARTER, revision: 0, inspected: [], evidence: {}, connections: {}, notes: {}, runs: [], kept: {}, updatedAt: null, saveId: null };
+  return { starterRevision: 3, repairReplies: {}, backpacks: {}, order: {price:"", quantity:""}, tasks: restoreTasks(null,mode === 'assessment' ? STARTER : PRACTICE_SOURCE), printer: printerState(mode === 'assessment' ? STARTER : PRACTICE_SOURCE), version: CASE_VERSION, mode, identity: { firstName: '', lastName: '', group: '', character: 'boy' }, source: mode === 'practice' ? PRACTICE_SOURCE : STARTER, revision: 0, inspected: [], evidence: {}, connections: {}, notes: {}, runs: [], kept: {}, updatedAt: null, saveId: null };
 }
 
 export function updateSource(attempt, source, sectionEdit) {
@@ -106,6 +107,11 @@ export function validateAttempt(value, expectedMode) {
     const migrated = restoreTasks(null, clean.source);
     for (const id of Object.keys(migrated)) clean.tasks[id].range = migrated[id].range;
     clean.printer.range = printerState(clean.source).range;
+  }
+  for (const station of ['indent','bracket','conversion','name','operator']) {
+    const range = stationRange(clean,station);
+    const state = range && restoreBackpack(station,value.backpacks?.[station],clean.source.slice(...range));
+    if (state) clean.backpacks[station] = state;
   }
   return clean;
 }

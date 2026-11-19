@@ -1,10 +1,10 @@
 import { playSound } from './sound.js';
 import { speak, finishSpeech } from './speech.js';
-import { tasks } from './shop-tasks.js';
+import { tasks, stationRange } from './shop-tasks.js';
 import { openOrder, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun, requiredStation } from './task-scene.js';
 import { chapterIndex, createRuleBook } from './rule-book.js';
 import { setupWalk } from './shop-walk.js';
-import { TOOLBOX } from './case.js';
+import { inventory } from './backpack.js';
 import { paint } from './shop-art.js';
 
 const icon = (glyph, label) => '<span aria-hidden="true">'+glyph+'</span> '+label;
@@ -42,16 +42,27 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     tools.querySelector('header button').onclick=()=>tools.close();
     tools.showModal();
   }
-  let held='';
-  function bag(onChoose){
+  function bag(){
     playSound('handle_small_leather');
-    tool('Detective bag','<div class="bag-lining"><p>Choose a code piece to carry.</p><div id="strip-bag"></div></div>');
-    for(const token of TOOLBOX){
-      const button=document.createElement('button');
-      button.textContent=token==='    '?'4 spaces':token;
-      button.onclick=()=>{held=token;tools.close();onChoose?.(token);};
-      id('strip-bag').append(button);
+    const attempt = getAttempt();
+    const current = currentOrderRun(attempt);
+    const last = current || attempt.runs.at(-1);
+    const station = requiredStation(attempt, current, nextOrder(attempt), pendingQuestion(attempt));
+    tool('Detective bag','<div class="bag-lining"><p></p><div id="strip-bag"></div></div>');
+    const message = tools.querySelector('p');
+    if (typeof last?.printed !== 'string') {
+      message.textContent = 'Try the order at the printer first. Then you’ll know which machine needs a piece.';
+      return;
     }
+    const range = station && stationRange(attempt, station);
+    if (!range || judge(last, last.price, last.quantity)[0] === 'ok') {
+      message.textContent = id('shop-goal').textContent;
+      return;
+    }
+    const label = station === 'bracket' ? 'Printer' : tasks.find(task => task.id === station)?.title;
+    message.textContent = `${label} backpack. Place pieces at the machine.`;
+    const pieces = inventory(station, attempt.source.slice(...range), attempt.backpacks[station]);
+    id('strip-bag').textContent = pieces.length ? pieces.map(token => (token === '    ' ? '4 spaces' : token) + ' ×1').join(' · ') : '0 pieces left';
   }
   const hud=room.querySelector('.shop-hud');
   const home=hud.parentElement;
@@ -64,7 +75,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   function useBag(onChoose){
     const dialog=id('work-dialog');
     hud.setAttribute('popover','manual');dialog.append(hud);hud.showPopover();
-    bagButton.onclick=()=>bag(onChoose);
+    bagButton.onclick=()=>{playSound('handle_small_leather');onChoose();};
   }
   let destination;
   function pointTo(station, chapter, returnStation) {

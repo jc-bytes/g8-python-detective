@@ -9,6 +9,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png">
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./printer.css">
+  <link rel="stylesheet" href="./syntax.css">
   <script defer src="./vendor/pdfmake.js"></script>
   <script defer src="./vendor/pdf-fonts.js"></script>
   <script type="module" src="./app.js"></script>
@@ -59,7 +60,7 @@
           <button class="station station-indent" data-station="indent" aria-label="Inspect shop notice">
             <span class="number-pin">E</span><span class="notice-art" aria-hidden="true"><span class="tape"></span><b>SHOP NOTICE</b><span>Check every order<br>Follow the<br><strong>shop rules</strong></span></span><span class="object-label">Shop notice<small>Inspect order notice</small></span>
           </button>
-          <button class="repair-desk" id="desk-open" aria-label="Open the repair desk to edit Python and test orders"><span class="monitor"><span class="monitor-bar">ORDER SYSTEM <i></i></span><span class="monitor-code">price = int(input(…))<br>quantity = int(input(…))<br>total = price + quantity<br><span class="cursor">▌</span></span><span class="monitor-cta">OPEN REPAIR DESK <span>↗</span></span></span><span class="monitor-foot" aria-hidden="true"></span><span class="keyboard-art" aria-hidden="true"></span></button>
+          <button class="repair-desk" id="desk-open" aria-label="Open the repair desk to read your program and test orders"><span class="monitor"><span class="monitor-bar">ORDER SYSTEM <i></i></span><span class="monitor-code">price = int(input(…))<br>quantity = int(input(…))<br>total = price + quantity<br><span class="cursor">▌</span></span><span class="monitor-cta">OPEN REPAIR DESK <span>↗</span></span></span><span class="monitor-foot" aria-hidden="true"></span><span class="keyboard-art" aria-hidden="true"></span></button>
           <div class="scene-caption">Everything you need is in this room.<br>Choose any case to begin.</div>
         </div>
         <section class="evidence-board" aria-labelledby="board-title"><div class="section-line"><div><p class="eyebrow">Collect → Connect → Repair</p><h2 id="board-title">Your evidence board</h2></div><span id="evidence-count" class="badge">0 / 5 cards attached</span></div><p class="board-instruction">Use this optional board to organise your thinking. Drag a collected card to any investigation, or select the card and then a slot. <span id="suspicion-hint">If you add a note, explain in a complete sentence why you suspect that line.</span> There is no matching answer key. The board is not graded.</p><div id="clue-tray" class="clue-tray" role="group" aria-label="Collected clue cards"></div><div id="board-slots" class="board-slots"></div><p id="board-message" class="small" aria-live="polite">No evidence collected yet. Inspect an object in the room.</p></section>
