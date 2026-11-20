@@ -45,7 +45,11 @@ export function studentDiagnostic(trace) {
 function pythonDiagnostic(record) {
   const trace = record.error.trim();
   const frame = trace.lastIndexOf('File "student_order.py"');
-  return studentDiagnostic(frame < 0 ? trace.split('\n').at(-1) : trace.slice(frame));
+  const lines = studentDiagnostic(frame < 0 ? trace.split('\n').at(-1) : trace.slice(frame)).split('\n');
+  const lineNumber = lines[0].match(/^File "student_order\.py", line (\d+)/)?.[1];
+  const sourceLine = record.source.split('\n')[Number(lineNumber) - 1]?.trim();
+  if (sourceLine && lines[1]?.trim() !== sourceLine) lines.splice(1, 0, '    ' + sourceLine);
+  return lines.join('\n');
 }
 
 function repairEvidence(record, target) {
@@ -61,8 +65,6 @@ function repairEvidence(record, target) {
   if (!frame) return;
   const sourceLine = record.source.split('\n')[Number(frame[1]) - 1]?.trim();
   if (!sourceLine) return;
-  // Runtime errors can give just the line number. Show the line from this run's saved code.
-  if (lines[1]?.trim() !== sourceLine) lines.splice(1, 0, '    ' + sourceLine);
   const receipt = receiptFor(record);
   let clue;
   switch (target) {
@@ -208,6 +210,8 @@ export function investigationGoal(attempt, current, customer, question) {
   if (target !== 'ok') {
     const [number,title,hint] = clueGoals[target] || [1,'Read the Python result','Check the reported line and try again.'];
     if (!current) return [number,title,'Run the order again to check your changes.'];
+    const stoppedAt = !target && stationForErrorLine(attempt, run);
+    if (stoppedAt) return [clueGoals[stoppedAt][0], `Check the ${stations[stoppedAt].toLowerCase()}`, 'Look at the line where Python stopped.'];
     return [number,title,hint];
   }
   if (customer===transfer[0]) return [1,initial[1],'Test the handwritten order with your current code.'];
@@ -234,6 +238,16 @@ function confirmedRepair(attempt, record, target) {
 function needsRepairReply(attempt, repair) {
   return repair === 'conversion' ? !attempt.notes.conversion?.trim() : !attempt.repairReplies[repair]?.sent;
 }
+function stationForErrorLine(attempt, run) {
+  const frame = [...run.error.matchAll(/File "student_order\.py", line (\d+)/g)].at(-1);
+  if (frame && run.source === attempt.source) {
+    const offset = run.source.split('\n').slice(0, Number(frame[1]) - 1).reduce((n,line) => n + line.length + 1, 0);
+    for (const id of Object.keys(stations)) {
+      const range = stationRange(attempt, id);
+      if (range && range[0] <= offset && offset <= range[1]) return id;
+    }
+  }
+}
 // The floor uses the same evidence and outstanding replies as the objective.
 export function requiredStation(attempt, current, customer, question) {
   const run = current || attempt.runs.at(-1);
@@ -246,15 +260,9 @@ export function requiredStation(attempt, current, customer, question) {
   if (target === 'name' && run.nameComparison === 'calculator') return 'operator';
   if (target === 'ok') return customer || question ? 'bracket' : null;
   if (target) return target;
+  const stoppedAt = stationForErrorLine(attempt, run);
+  if (stoppedAt) return stoppedAt;
   if (Object.hasOwn(stations, run.station)) return run.station;
-  const frame = [...run.error.matchAll(/File "student_order\.py", line (\d+)/g)].at(-1);
-  if (frame && run.source === attempt.source) {
-    const offset = run.source.split('\n').slice(0, Number(frame[1]) - 1).reduce((n,line) => n + line.length + 1, 0);
-    for (const id of Object.keys(stations)) {
-      const range = stationRange(attempt, id);
-      if (range && range[0] <= offset && offset <= range[1]) return id;
-    }
-  }
   return 'bracket';
 }
 function calculatorLineFor(source) {
@@ -687,6 +695,16 @@ export function openOrder(
       machineStep.textContent = message;
       return;
     }
+    const stoppedAt = !target && record.error && stationForErrorLine(attempt, record);
+    if (stoppedAt && stoppedAt !== station) {
+      evidenceScreen({title:'Python error', lines:pythonDiagnostic(record).split('\n'), row:1},
+        `Python stopped in the ${stations[stoppedAt].toLowerCase()}.`, () => {
+          errorScreen.hidden = true;
+          backToShop(stoppedAt);
+        });
+      return;
+    }
+    if (stoppedAt && needsChapter && needsReading(stoppedAt)) return;
     const comparingNames = target === 'name' && record.error.includes('NameError');
     if (target === station && !comparingNames && inspectStation(record)) return;
     const alreadyRead = record.clueRead === target || (target === 'indent' && record.noticeErrorRead === true);
@@ -703,7 +721,10 @@ export function openOrder(
       return;
     }
     if (record.printed || !record.error) output('Printed receipt', record.printed || 'No receipt printed.');
-    if (record.error) output('Python error', pythonDiagnostic(record));
+    if (record.error) {
+      output('Python error', pythonDiagnostic(record));
+      if (stoppedAt) result.querySelector('details').open = true;
+    }
     if (record.stderr) output('Python messages', record.stderr);
     if (comparingNames) {
       const calculatorClue = 'Let’s go to the calculator and see what name it used for the total.';
@@ -750,7 +771,7 @@ export function openOrder(
       return;
     }
     if (target !== 'ok') {
-      if (!target) machineStep.textContent = message;
+      if (!target) machineStep.textContent = stoppedAt ? 'Look at the line where Python stopped.' : message;
       return;
     }
     const test = nextOrder(attempt);

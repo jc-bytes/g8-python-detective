@@ -1,5 +1,5 @@
 importScripts('./offline-assets.js');
-const CACHE = 'python-detective-static-87096a47aacc98f9beede0d9';
+const CACHE = 'python-detective-static-9c1928f6d12994fc91b7640b';
 const FILES = new Set(['./', ...globalThis.detectiveOfflineAssets.map(file => `./${file}`)]);
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(Array.from(FILES, path => new Request(path, {cache: 'reload'})))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', event => {
