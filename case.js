@@ -100,7 +100,7 @@ const inputTopic = {
 };
 const zeroTopic = {
   id:'indent', title:'The zero order', questions:[
-    {prompt:'Each notebook costs 4, but this customer bought none. Why does the receipt show a total of 0?', choices:[
+    {prompt:'Each notebook costs 4, but this customer bought 0 notebooks. Why does the receipt show a total of 0?', choices:[
       'The till changed the price of each notebook to 0.',
       'The till multiplied the price of 4 by the quantity of 0.',
       'The till skipped the calculation because the order was empty.'

@@ -55,11 +55,15 @@ export function trackTaskEdits(attempt, source, sectionEdit) {
 export function stationRange(attempt, station) {
   const sections = [...tasks.map(task => attempt.tasks[task.id]), attempt.printer];
   const index = station === 'bracket' ? tasks.length : tasks.findIndex(task => task.id === station);
-  const stored = sections[index]?.range;
+  if (index < 0) return null;
+  const stored = sections[index].range;
   const source = attempt.source;
   const before = sections[index - 1]?.range;
   const after = sections[index + 1]?.range;
-  if (stored && (!before || before[1] < stored[0]) && (!after || stored[1] < after[0])) return stored;
+  const fitsSection = ([start, end]) =>
+    (start === 0 || source[start - 1] === '\n') && (end === source.length || source[end] === '\n') &&
+    sections.every((section, i) => !section.range || i === index ||
+      (i < index ? section.range[1] < start : end < section.range[0]));
   // Older saves could lose the range when a student deleted or renamed a line.
   if ((index > 0 && !before) || (index < sections.length - 1 && !after)) {
     const repair = repairLines.find(item => item.id === station);
@@ -74,11 +78,11 @@ export function stationRange(attempt, station) {
     }
     const start = lines.slice(0, first).reduce((offset, line) => offset + line.length + 1, 0);
     const end = start + lines.slice(first, row + 1).join('\n').length;
-    if (sections.some((part, i) => i !== index && part.range && start <= part.range[1] && end >= part.range[0])) return null;
-    return [start, end];
+    return fitsSection([start, end]) ? [start, end] : null;
   }
+  if (stored && fitsSection(stored)) return stored;
   const start = before ? before[1] + 1 : 0;
   const end = after ? after[0] - 1 : source.length - Number(source.endsWith('\n'));
   if (start > end || (before && source[start - 1] !== '\n') || (after && source[end] !== '\n')) return null;
-  return [start, end];
+  return fitsSection([start, end]) ? [start, end] : null;
 }

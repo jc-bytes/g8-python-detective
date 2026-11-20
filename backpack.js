@@ -165,7 +165,8 @@ export function renderInventory(container, remaining, available = [], makePiece)
     slot.classList.toggle('slot-used', count === 0);
     const label = document.createElement('span');
     label.className = 'slot-label';
-    label.textContent = display(token);
+    label.textContent = token;
+    if (token === '    ') label.classList.add('indent-piece');
     const quantity = document.createElement('small');
     quantity.className = 'slot-quantity';
     quantity.textContent = `×${count}`;
@@ -265,7 +266,7 @@ export function makeBackpack(
             const target = button(replace ? token : '', () =>
               apply([...state.moves, { row: r, col: c, op, piece }]));
             target.className = replace ? 'pack-spot pack-swap py-' + kind(token) : 'pack-spot pack-gap';
-            target.dataset.preview = display(piece);
+            target.dataset.preview = piece === '    ' ? '····' : piece;
             const place = replace ? 'Replace' : 'Place ' + op;
             target.setAttribute('aria-label', `${place} ${token}, line ${r + 1}, position ${c + 1}`);
             return target;
@@ -340,7 +341,8 @@ export function makeBackpack(
           ghost = document.createElement('span');
           ghost.className = 'pack-ghost';
           ghost.setAttribute('aria-hidden', 'true');
-          ghost.textContent = display(piece);
+          ghost.textContent = piece;
+          if (piece === '    ') ghost.classList.add('indent-piece');
           root.append(ghost);
           frame = requestAnimationFrame(scrollEdge);
         }

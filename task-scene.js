@@ -78,7 +78,7 @@ function repairEvidence(record, target) {
     case 'name': {
       const name = record.error.match(/NameError: name '([^']+)' is not defined/)?.[1];
       const missing = name ? `the name “${name}”` : 'a name on this line';
-      clue = `Python can’t find ${missing}. Let’s look in the ledger. Does it use the same name the calculator used to save the total?`;
+      clue = `Python can’t find ${missing}. Let’s look in the ledger.`;
       break;
     }
     default: return;
@@ -257,6 +257,10 @@ export function requiredStation(attempt, current, customer, question) {
   }
   return 'bracket';
 }
+function calculatorLineFor(source) {
+  const row = repairRow(source, repairLines.find(item => item.id === 'operator'));
+  return row == null ? '' : source.split('\n')[row];
+}
 export function openOrder(
   station,
   opener,
@@ -278,13 +282,13 @@ export function openOrder(
   const attempt = getAttempt();
   const last = currentOrderRun(attempt);
   if (station === 'operator' && last?.nameComparison && judge(last, last.price, last.quantity)[0] === 'name') {
-    const range = stationRange(attempt, station);
+    const line = calculatorLineFor(last.source);
     openDialog('Calculator', 'Customer order', `<div class="order-work"><section class="order-machine" aria-labelledby="calculation-title">
-      <h3 id="calculation-title">${range ? 'Calculator code' : 'Order program'}</h3>
-      <pre class="pack-code"><code id="calculator-source"></code></pre>
+      <h3 id="calculation-title">Calculator code</h3>
+      ${line ? '<pre class="pack-code"><code id="calculator-source"></code></pre>' : '<p id="calculator-source">I couldn’t find the calculation in this saved order.</p>'}
       <button class="primary" id="find-ledger" aria-describedby="calculator-source">Find the ledger</button>
     </section></div>`, opener);
-    colorCode(id('calculator-source'), range ? last.source.slice(...range) : last.source);
+    if (line) colorCode(id('calculator-source'), line);
     if (canEdit()) { last.nameComparison = 'ledger'; save(); }
     pointTo('name', undefined, station);
     useBag();
@@ -702,14 +706,13 @@ export function openOrder(
     if (record.error) output('Python error', pythonDiagnostic(record));
     if (record.stderr) output('Python messages', record.stderr);
     if (comparingNames) {
+      const calculatorClue = 'Let’s go to the calculator and see what name it used for the total.';
       function guide(destination, prompt) {
         speak(dialogue, prompt);
         backToShop(destination);
       }
       if (station === 'name' && record.nameComparison === 'ledger') {
-        const calculation = repairLines.find(item => item.id === 'operator');
-        const calculationRow = repairRow(record.source, calculation);
-        const calculatorLine = calculationRow == null ? '' : record.source.split('\n')[calculationRow];
+        const calculatorLine = calculatorLineFor(record.source);
         if (inspectStation(record, calculatorLine)) return;
         if (calculatorLine) {
           const reference = document.createElement('p');
@@ -723,12 +726,19 @@ export function openOrder(
         result.replaceChildren();
         machineStep.textContent = '';
       } else if (station === 'name') {
-        if (canEdit()) { record.nameComparison = 'calculator'; save(); refresh(); }
         const row = repairRow(record.source, repairLines.find(item => item.id === 'name'));
         if (row != null) { evidence.hidden = false; evidence.textContent = record.source.split('\n')[row]; }
-        guide('operator', 'Let’s see how the calculator spells the name for the total.');
+        ownerView();
+        speak(dialogue, 'Here’s the line the ledger uses to print the total.');
+        action('Continue', () => {
+          speak(dialogue, 'Could the name be spelled wrong?');
+          action('Continue', () => {
+            if (canEdit()) { record.nameComparison = 'calculator'; save(); }
+            guide('operator', calculatorClue);
+          });
+        });
       } else if (record.nameComparison === 'calculator') {
-        guide('operator', 'Let’s see how the calculator spells the name for the total.');
+        guide('operator', calculatorClue);
       } else {
         guide('name', 'Walk to the ledger.');
       }
@@ -791,10 +801,13 @@ export function openOrder(
       evidence.replaceChildren(sample);
     } else if (current.evidence === 'condition') {
       const lines = record.source.split('\n');
-      const condition = lines.findIndex(line => /^\s*if\b/.test(line));
-      const code = document.createElement('code');
-      colorCode(code, condition < 0 ? record.source : lines.slice(condition).join('\n').trimEnd());
-      evidence.replaceChildren(code);
+      const notice = repairRow(record.source, repairLines.find(item => item.id === 'indent'));
+      const last = repairRow(record.source, repairLines.find(item => item.id === 'bracket'));
+      if (notice > 0 && last === notice + 1 && /^\s*if\b/.test(lines[notice - 1])) {
+        const code = document.createElement('code');
+        colorCode(code, lines.slice(notice - 1, last + 1).join('\n'));
+        evidence.replaceChildren(code);
+      }
     } else if (current.evidence === 'compare-receipts') {
       const previous = keptRun(attempt, transfer[1].id);
       if (previous?.printed) {

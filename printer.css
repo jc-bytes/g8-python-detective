@@ -197,7 +197,8 @@ dialog.bound-book {
   padding-inline: .12em;
 }
 .bound-book .indent-rule, .bound-book .py-indent { background-color: #f3d691; color: #503618; }
-.bound-book .py-indent {
+.bound-book .py-indent, .slot-label.indent-piece, .pack-ghost.indent-piece {
+  background-color: #f3d691;
   background-image: radial-gradient(circle at center, #78501d 1.3px, transparent 1.5px);
   background-size: 1ch 100%;
 }
@@ -531,7 +532,7 @@ dialog.bound-book {
 
 #work-dialog:has(.pack-tray:not([hidden])) > .shop-hud { display: none; }
 
-#work-dialog[open]:has(.pack-tray:not([hidden])) {
+#work-dialog[open]:has(.order-work:not(.printing, .owner-question, .order-entry) .pack-tray:not([hidden])) {
   width: 96vw;
   max-width: calc(100vw - 12px);
   max-height: 96dvh;
@@ -574,7 +575,7 @@ dialog.bound-book {
 .pack-ghost { position: fixed; transform: translate(-50%, calc(-100% - 10px)); z-index: 5; }
 .pack-code:has(.pack-spot) { touch-action: pan-x pan-y; }
 @media (max-width: 540px) {
-  #work-dialog:has(.pack-tray:not([hidden])) #dialog-body { padding: 4px; }
+  #work-dialog:has(.order-work:not(.printing, .owner-question, .order-entry) .pack-tray:not([hidden])) #dialog-body { padding: 4px; }
   #order-code:has(.pack-tray:not([hidden])) { column-gap: .45rem; }
   .order-machine:has(.pack-tray:not([hidden])) { padding: .65rem; }
   .pack-tray { padding: .4rem; }
@@ -704,17 +705,17 @@ button.inventory-slot:hover { background: #ffedc1; }
 button.inventory-slot:active { cursor: grabbing; }
 button.inventory-slot:focus-visible, button.inventory-slot[aria-pressed=true] { outline: 3px solid #195c59; outline-offset: 1px; background: #fff0c6; }
 .slot-label { overflow-wrap: anywhere; }
-.py-space .slot-label { font-size: .86rem; }
+.slot-label.indent-piece, .pack-ghost.indent-piece { white-space: pre; padding-inline: 0; }
 .slot-quantity { position: absolute; right: .22rem; bottom: .16rem; font: bold .77rem/1 monospace; color: #413728; }
 .slot-used { background: #b59d79; }
 .slot-used, .slot-stored { border-color: #ac956f #ebd6ad #ebd6ad #ac956f; background: #d9c7a5; box-shadow: none; color: #514739; }
 .slot-used .slot-label { text-decoration: line-through; }
-#work-dialog:has(.pack-tray:not([hidden])):not(:has(.owner-question, .printing)) #dialog-inventory,
+#work-dialog:has(.order-work.printing) #dialog-inventory,
+#work-dialog:has(.pack-tray:not([hidden])):not(:has(.owner-question)) #dialog-inventory,
 .shop-hud[popover] #room-bag { display: none; }
 @media (max-width: 540px) {
   .pack-tray .pack-pieces { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .18rem; }
   .pack-tray .inventory-slot { font-size: .88rem; min-height: 44px; }
-  .pack-tray .py-space .slot-label { font-size: .67rem; }
   .pack-tray .slot-quantity { font-size: .62rem; }
 }
 .pack-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; margin: .65rem; }
