@@ -1,5 +1,16 @@
-.py-function,.py-keyword{color:#663381}
-.py-string{color:#17633e}
-.py-name{color:#155780}
-.py-symbol,.py-space{color:#784318}
-.py-number{color:#983c56}
+.py-keyword { color: var(--py-keyword, #663381); }
+.py-function { color: var(--py-function, #005e69); }
+.py-string { color: var(--py-string, #17633e); }
+.py-name { color: var(--py-name, #155780); }
+.py-symbol, .py-space { color: var(--py-symbol, #784318); }
+.py-number { color: var(--py-number, #983c56); }
+
+.python-screen pre > code {
+  --py-keyword: #e5b8fa;
+  --py-function: #8de3e5;
+  --py-string: #a6e3b5;
+  --py-name: #a8d8ff;
+  --py-symbol: #f5c89f;
+  --py-number: #ffc1d5;
+}
+.owner-card p code { font: 650 .96em/1 monospace; }

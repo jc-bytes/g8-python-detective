@@ -18,7 +18,7 @@ The Python runtime executes student-authored code locally. This is not a hardene
 
 PDF reports use pdfmake 0.2.20 with its bundled Roboto fonts and DejaVu Sans Mono and DejaVu Serif. The library and DejaVu licenses are packaged locally.
 
-The case folder’s PDF preview renders the filed PDF with PDF.js 4.10.38. The reader, worker, and Apache license ship in this folder.
+The report download renders each PDF page as an image with PDF.js 4.10.38. The reader, worker, and Apache license ship in this folder.
 
 ## Sound effects
 

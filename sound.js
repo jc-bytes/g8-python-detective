@@ -15,6 +15,15 @@ export function playSound(name, volume = 0.28) {
   clip.play().catch(() => {});
 }
 
+export function voiceHint(text) {
+  const voice = window.speechSynthesis;
+  if (!enabled || !voice || !window.SpeechSynthesisUtterance) return;
+  const line = new SpeechSynthesisUtterance(text);
+  line.lang = 'en-US';
+  voice.speak(line);
+  return () => voice.cancel();
+}
+
 export function setupSoundToggle(button) {
   function update() {
     button.setAttribute('aria-pressed', String(enabled));

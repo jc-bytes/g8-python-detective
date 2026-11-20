@@ -23,12 +23,20 @@ export function restoreTasks(saved,source,starter=STARTER){
       if(record && Number.isSafeInteger(record.revision) && record.revision>=0 && typeof record.candidate==='string' && record.candidate.length<=20100 && typeof record.output==='string' && record.output.length<=40000)records[key]={revision:record.revision,candidate:record.candidate,output:record.output,...(typeof record.ownerLine==='string'?{ownerLine:record.ownerLine.slice(0,800)}:{})};
       if(typeof old?.proof?.[key]==='string' && old.proof[key].length<=20000)proof[key]=old.proof[key];
     }
-    const questionCount = EXPLANATIONS.find(item => item.id === task.id)?.questions.length || 0;
+    // A saved answer or draft for the retired question still belongs to that question.
+    const usedOldFollowup = old?.completedReplies?.length === 3 || old?.replies?.length >= 2 || (old?.replies?.length === 1 && old?.draft);
+    const legacyFollowup = task.id === 'indent' && (old?.receiptQuestionCount === 3 || (!old?.receiptQuestionCount && usedOldFollowup));
+    const questionCount = legacyFollowup ? 3 : (EXPLANATIONS.find(item => item.id === task.id)?.questions.length || 0);
     const replies = Array.isArray(old?.replies) ? old.replies.slice(0, Math.max(0, questionCount - 1)) : [];
     const validReplies = replies.every(text => typeof text === 'string' && text.trim() && text.length <= 3000);
     const completedReplies = old?.completedReplies;
     const complete = Array.isArray(completedReplies) && completedReplies.length === questionCount && completedReplies.every(text => typeof text === 'string' && text.trim() && text.length <= 3000);
-    return [task.id,{range,proof,records,completedReplies:complete ? [...completedReplies] : [],replies:validReplies ? replies : [],last:Object.hasOwn(records,old?.last)?old.last:null,report:typeof old?.report==='string'?old.report.slice(0,40000):'',draft:typeof old?.draft==='string'?old.draft.slice(0,3000):''}];
+    // Keep the original question with a written answer or draft from an older save.
+    const started = old?.draft || replies.length || complete;
+    const zeroOrderVersion = old?.zeroOrderVersion === 2 || (!started && old?.zeroOrderVersion !== 1) ? 2 : 1;
+    const startedFinal = complete || (replies.length === questionCount - 1 && Boolean(old?.draft));
+    const receiptPrediction = old?.receiptPrediction === true || !startedFinal;
+    return [task.id,{range,proof,records,...(task.id === 'indent' ? {zeroOrderVersion, receiptQuestionCount:questionCount, receiptPrediction} : {}),completedReplies:complete ? [...completedReplies] : [],replies:validReplies ? replies : [],last:Object.hasOwn(records,old?.last)?old.last:null,report:typeof old?.report==='string'?old.report.slice(0,40000):'',draft:typeof old?.draft==='string'?old.draft.slice(0,3000):''}];
   }));
 }
 export function trackTaskEdits(attempt, source, sectionEdit) {

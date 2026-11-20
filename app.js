@@ -5,10 +5,10 @@ import { currentOrderRun, judge, stationHint, studentDiagnostic } from './task-s
 import { restoreBackpack, suppliedCode } from './backpack.js';
 import { chapterIndex } from './rule-book.js';
 import { setupPrinter } from './printer-scene.js';
-import { allowsRepair, repairReminder, CASE_VERSION, CASES, STARTER, TESTS, RULES, PRACTICE_SOURCE, EXPLANATIONS } from './case.js';
+import { allowsRepair, repairReminder, CASE_VERSION, CASES, receiptFor, TESTS, shopRules, PRACTICE_SOURCE, EXPLANATIONS } from './case.js';
 import { newAttempt, updateSource, placeEvidence, recordRun, keptRun, validateAttempt, fileStem } from './model.js';
 import { PythonRunner } from './runtime.js';
-import { exhibitPrint, downloadBlob, filingDate, caseDisposition, reportSections, submissionFiles } from './export.js';
+import { exhibitPrint, downloadBlob, filingDate, caseDisposition, reportSections, prepareSubmission } from './export.js';
 
 const byId = id => document.getElementById(id);
 setupSoundToggle(byId('sound-toggle'));
@@ -23,6 +23,7 @@ let selection = null;
 let running = false;
 let conflict = false;
 let exportedUrls = [];
+let releaseFolder;
 let dialogOpener;
 const runner = new PythonRunner(message => {
   const output = byId('task-result') || byId('printer-status') || byId(mode === 'practice' ? 'practice-output' : 'runtime-status');
@@ -81,13 +82,18 @@ function canEdit() {
   return false;
 }
 
+function persistAttempt(value, currentMode) {
+  const updatedAt = new Date().toISOString();
+  const saveId = crypto.randomUUID();
+  localStorage.setItem(storageKey(currentMode), JSON.stringify({...value, updatedAt, saveId}));
+  Object.assign(value, {updatedAt, saveId});
+  byId('save-status').textContent = `Saved on this browser · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 function save() {
   if (conflict || damagedSave?.mode === mode) return;
-  attempt.updatedAt = new Date().toISOString();
-  attempt.saveId = crypto.randomUUID();
   try {
-    localStorage.setItem(storageKey(mode), JSON.stringify(attempt));
-    byId('save-status').textContent = `Saved on this browser · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    persistAttempt(attempt, mode);
   } catch {
     announce('Local saving failed. Open Menu to download a progress backup.');
     byId('save-status').textContent = 'Not saved. Download a progress backup now.';
@@ -104,8 +110,8 @@ function setSource(source, sectionEdit) {
   const station = sectionEdit?.station;
   const section = station && source.slice(...sectionEdit.range);
   const backpack = station && restoreBackpack(station, sectionEdit.backpack, section);
-  const restoring = station && sectionEdit.restore && section === suppliedCode(station);
-  if (mode === 'assessment' && (!station || (!backpack && !restoring && !allowsRepair(attempt.source, source)))) {
+  const restoring = station && sectionEdit.restore && section === suppliedCode(station, receiptFor(attempt).starter);
+  if (mode === 'assessment' && (!station || (!backpack && !restoring && !allowsRepair(attempt.source, source, receiptFor(attempt).starter)))) {
     const feedback = byId('repair-limit');
     if (feedback) feedback.textContent = repairReminder;
     return false;
@@ -134,7 +140,9 @@ function statusFor(station) {
 let atMaterials = false;
 let entered = false;
 const settings = byId('settings');
+byId('menu-inventory').onclick = byId('dialog-inventory').onclick = printer.openBag;
 function updateCaseMenu() {
+  byId('menu-inventory').hidden = mode !== 'assessment';
   const inShop = entered && mode === 'assessment' && !atMaterials;
   byId('other-objects').hidden = !inShop || printer.needsWelcome();
   byId('menu-export').hidden = mode === 'practice' || printer.needsWelcome();
@@ -177,6 +185,10 @@ function refresh() {
   byId('detective-choices').disabled = blocked;
   for (const choice of byId('detective-choices').querySelectorAll('input')) choice.checked = choice.value === attempt.identity.character;
   for (const field of ['first-name', 'last-name', 'group']) byId(field).disabled = blocked;
+  if (materialsAttempt && materialsAttempt !== attempt) {
+    for (const id of ['board-slots', 'clue-tray', 'case-list', 'rules-list', 'board-message', 'evidence-count']) byId(id).replaceChildren();
+    materialsAttempt = null;
+  }
   if (mode === 'practice') {
     if (document.activeElement !== byId('practice-code')) byId('practice-code').value = attempt.source;
     byId('practice-code').readOnly = blocked;
@@ -187,6 +199,26 @@ function refresh() {
     return;
   }
   printer.refresh();
+  if (!byId('existing-case').hidden) refreshMaterials(blocked);
+  if (byId('desk-code') && document.activeElement !== byId('desk-code')) byId('desk-code').value = attempt.source;
+  document.querySelectorAll('[data-explanation]').forEach(field => { field.readOnly = blocked; });
+  if (byId('line-numbers')) byId('line-numbers').textContent = attempt.source.split('\n').map((line, index) => index + 1).join('\n');
+  renderRuns();
+}
+
+let materialsAttempt;
+let materialsState;
+function refreshMaterials(blocked) {
+  // Notes update directly in their inputs. Restoring a backup replaces the attempt.
+  const state = JSON.stringify([blocked, attempt.inspected, attempt.evidence, selection]);
+  if (attempt === materialsAttempt && state === materialsState) return;
+  materialsAttempt = attempt;
+  materialsState = state;
+  byId('rules-list').replaceChildren(...shopRules(receiptFor(attempt)).map(rule => {
+    const item = document.createElement('li');
+    item.textContent = rule;
+    return item;
+  }));
   const caseList = byId('case-list');
   caseList.replaceChildren();
   for (const station of CASES) {
@@ -237,7 +269,7 @@ function refresh() {
     if (card) {
       const evidence = document.createElement('p');
       evidence.className = 'board-evidence';
-      evidence.textContent = card.evidence;
+      evidence.textContent = evidenceText(card);
       investigation.append(evidence);
     }
     const lineLabel = document.createElement('label');
@@ -275,23 +307,25 @@ function refresh() {
   const count = Object.keys(attempt.evidence).length;
   byId('evidence-count').textContent = `${count} / 5 cards attached`;
   byId('board-message').textContent = selection?.kind === 'clue' ? 'Clue selected. Select a board slot to attach it.' : attempt.inspected.length ? `${attempt.inspected.length} clues collected. ${count} cards attached. Select a tray card to place or move it.` : 'No evidence collected yet. Inspect an object in the room.';
-  if (byId('desk-code') && document.activeElement !== byId('desk-code')) byId('desk-code').value = attempt.source;
-  document.querySelectorAll('[data-explanation]').forEach(field => { field.readOnly = blocked; });
-  if (byId('line-numbers')) byId('line-numbers').textContent = attempt.source.split('\n').map((line, index) => index + 1).join('\n');
-  renderRuns();
 }
 
 function openDialog(title, eyebrow, content, opener) {
+  releaseFolder?.();
   printer.restoreBag();
   byId('dialog-kit')?.remove();
   selection = null;
   dialogOpener = opener || document.activeElement;
+  byId('dialog-inventory').hidden = mode !== 'assessment';
   byId('dialog-title').textContent = title;
   byId('dialog-eyebrow').textContent = eyebrow;
   dialogBody.innerHTML = content;
   if (!dialog.open) dialog.showModal();
   byId('dialog-close').focus();
   dialog.scrollTop = 0;
+}
+
+function evidenceText(card) {
+  return card.id === 'indent' ? shopRules(receiptFor(attempt)).slice(-3).join(' ') : card.evidence;
 }
 
 function openStation(caseId, opener) {
@@ -311,10 +345,10 @@ function openStation(caseId, opener) {
     byId('station-message').before(guidance);
   }
   byId('station-object').textContent = station.object;
-  byId('station-evidence').textContent = station.evidence;
+  byId('station-evidence').textContent = evidenceText(station);
   if (station.program) {
     byId('archive-program').hidden = false;
-    byId('archive-program').textContent = STARTER;
+    byId('archive-program').textContent = receiptFor(attempt).starter;
   }
   byId('collect-clue').addEventListener('click', () => {
     if (!canEdit()) return;
@@ -332,7 +366,7 @@ function openDesk(opener) {
   if(printer.needsWelcome()){if(dialog.open)dialog.close();showShop();printer.inviteToTalk();return;}
   openDialog('The repair desk', 'One program / Three real tests', `
     <div class="desk-grid"><section><label for="desk-code">Your complete Python program</label><p class="small" id="desk-guide">Read your program here. To fix a line, go to the marked machine and use your backpack.</p><div class="editor-wrap"><pre class="line-numbers" id="line-numbers" aria-hidden="true"></pre><textarea id="desk-code" readonly aria-describedby="desk-guide" class="code-editor" rows="12" wrap="off"></textarea></div></section>
-    <section><h3>Test an order</h3><p class="small">Run one order at a time. Does the printed total equal price × quantity? A positive total should print “Order recorded”. A zero total should skip that line. Every receipt should end with “Debug check complete”. If Python stops early, check the error and try again. Keep the result you want to report.</p><div class="test-buttons" id="test-buttons"></div><div class="button-row" style="margin-top:10px"><button id="stop-run">Stop run</button></div><p id="runtime-status" class="panel-status" aria-live="polite"></p><div id="run-history" aria-label="Actual run results"></div></section></div><section id="explanations"><h3>Your two explanations</h3><p class="small">Explain your decisions in complete sentences using your own words. These are the required written explanations. Board notes are optional.</p></section><div class="station-bottom button-row"><button id="desk-review" class="primary">Review submission files</button><button id="desk-return">Return to investigation</button></div>`, opener);
+    <section><h3>Test an order</h3><p class="small">Run one order. Check the total. ${receiptFor(attempt).saleRule} Every receipt ends with “${receiptFor(attempt).last}”.</p><div class="test-buttons" id="test-buttons"></div><div class="button-row" style="margin-top:10px"><button id="stop-run">Stop run</button></div><p id="runtime-status" class="panel-status" aria-live="polite"></p><div id="run-history" aria-label="Actual run results"></div></section></div><section id="explanations"><h3>Your two explanations</h3><p class="small">Explain your decisions in complete sentences using your own words. These are the required written explanations. Board notes are optional.</p></section><div class="station-bottom button-row"><button id="desk-review" class="primary">Review submission files</button><button id="desk-return">Return to investigation</button></div>`, opener);
   byId('desk-code').value = attempt.source;
   byId('desk-code').addEventListener('scroll', event => { byId('line-numbers').scrollTop = event.target.scrollTop; });
   for (const explanation of EXPLANATIONS) {
@@ -451,22 +485,22 @@ function renderRuns() {
 
 function openSubmission(opener) {
   const filedAt = new Date();
-  openDialog('Case folder', 'Shop investigations', `<article class="case-report"><div class="case-paper"><header><div class="file-mast"><span>SHOP INVESTIGATIONS</span><span>FILE № 001</span></div><h3>The Broken Order</h3><dl class="file-fields"><div><dt>Investigating detective</dt><dd id="case-byline"></dd></div><div><dt>Location</dt><dd>Shop counter</dd></div><div><dt>Disposition</dt><dd id="case-status"></dd></div></dl><p class="file-date">Filed ${filingDate(filedAt)}</p></header><div id="report-sections"></div></div><div class="report-actions"><button id="download-submission" class="primary">Download report and till code</button><button id="report-edit">Examine the till</button><button id="submission-return">Back to the shop</button></div><p id="export-status" role="status"></p><div id="submission-links" class="submission-links"></div><details><summary>View PDF pages</summary><section class="file-reader" aria-label="Case report pages"><nav aria-label="Report pages"><button class="previous" disabled>Previous page</button><span role="status">Opening case file…</span><button class="next" disabled>Next page</button></nav><canvas aria-hidden="true"></canvas></section></details></article>`, opener);
-  const reader = dialog.querySelector('.file-reader');
-  const files = submissionFiles(attempt, filedAt);
-  Promise.all([files, import('./report-view.js')]).then(([pair, view]) => {
-    if (reader.isConnected && dialog.open) return view.showPages(reader, pair.report);
-  }).catch(() => { reader.querySelector('[role=status]').textContent = 'The PDF preview could not open. The case file is shown above.'; });
+  openDialog('Case folder', 'Shop investigations', `<article class="case-report"><div class="case-paper"><header><div class="file-mast"><span>SHOP INVESTIGATIONS</span><span>FILE № 001</span></div><h3>The Broken Order</h3><dl class="file-fields"><div><dt>Investigating detective</dt><dd id="case-byline"></dd></div><div><dt>Location</dt><dd>Shop counter</dd></div><div><dt>Disposition</dt><dd id="case-status"></dd></div></dl><p class="file-date">Filed ${filingDate(filedAt)}</p></header><div id="report-sections"></div></div><div class="report-actions"><button id="download-submission" class="primary">Download report and till code</button><button id="submission-return">Back to the shop</button></div><p id="export-status" role="status"></p><div id="submission-links" class="submission-links"></div></article>`, opener);
+  const folder = dialog.querySelector('.case-report');
+  const files = prepareSubmission(attempt, filedAt);
+  releaseFolder = () => {
+    exportedUrls.forEach(url => URL.revokeObjectURL(url));
+    exportedUrls = [];
+    folder.remove();
+    releaseFolder = null;
+  };
   byId('case-byline').textContent = [attempt.identity.firstName, attempt.identity.lastName, attempt.identity.group].filter(Boolean).join(' ');
   byId('case-status').textContent = caseDisposition(attempt);
-  byId('report-edit').onclick = () => openDesk(opener);
   for (const {title, entries} of reportSections(attempt)) {
-    const lead = title === 'Statement of the store owner' || title === 'Detective’s findings' || title === 'Student answers';
-    const section = document.createElement(lead ? 'section' : 'details');
-    const summary = document.createElement(lead ? 'h4' : 'summary');
-    if (title.startsWith('Exhibit 01')) section.open = true;
-    summary.textContent = title;
-    section.append(summary);
+    const section = document.createElement('section');
+    const heading = document.createElement('h4');
+    heading.textContent = title;
+    section.append(heading);
     for (const exhibit of entries) {
       const {kind,value} = exhibit;
       if (kind === 'exhibit') {
@@ -527,22 +561,24 @@ async function exportFiles(showLinks = false, preparedFiles) {
   button.disabled = true;
   status.textContent = 'Preparing a Python file and PDF report from one snapshot…';
   try {
-    const files = await (preparedFiles || submissionFiles(attempt));
-    if (showLinks && byId('submission-links')) {
+    const files = preparedFiles || prepareSubmission(attempt);
+    const report = await files.report();
+    const links = showLinks && button.isConnected ? byId('submission-links') : null;
+    if (links) {
       exportedUrls.forEach(url => URL.revokeObjectURL(url));
       exportedUrls = [];
-      byId('submission-links').replaceChildren();
-      for (const [blob, extension, title] of [[files.python, 'py', 'Download Python program'], [files.report, 'pdf', 'Download PDF case report']]) {
+      links.replaceChildren();
+      for (const [blob, extension, title] of [[files.python, 'py', 'Download Python program'], [report, 'pdf', 'Download PDF case report']]) {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         exportedUrls.push(link.href);
         link.download = `${files.stem}.${extension}`;
         link.textContent = title;
-        byId('submission-links').append(link);
+        links.append(link);
       }
     }
     downloadBlob(files.python, `${files.stem}.py`);
-    downloadBlob(files.report, `${files.stem}.pdf`);
+    downloadBlob(report, `${files.stem}.pdf`);
     status.textContent = 'Both downloads requested. Your case report and till code are ready.';
   } catch (error) {
     status.textContent = `Export failed: ${error.message}. Your work is still here. Download a progress backup before closing.`;
@@ -639,7 +675,7 @@ for (const button of document.querySelectorAll('[data-info]')) {
   button.onclick = () => openDialog(button.textContent.trim().slice(1).trim(), 'Case materials', byId(button.dataset.info).innerHTML, button);
 }
 byId('dialog-close').addEventListener('click', () => dialog.close());
-dialog.addEventListener('close', () => { if(dialog.open)return; printer.restoreBag(); selection = null; dialogOpener?.focus({ preventScroll: true }); });
+dialog.addEventListener('close', () => { if(dialog.open)return; releaseFolder?.(); printer.restoreBag(); selection = null; dialogOpener?.focus({ preventScroll: true }); });
 byId('desk-open').addEventListener('click', event => openDesk(event.currentTarget));
 byId('submit-open').addEventListener('click', event => openSubmission(event.currentTarget));
 byId('help-open').addEventListener('click', event => { settings.close(); openDialog('How to investigate', 'Your mission', `<ol><li>Ask the owner what happened. Walk along the counter with him. You can use the Python rule book when you investigate.</li><li>Enter the customer’s price and quantity and select Run order. Read the receipt or the Python error.</li><li>Choose an object that fits the evidence, inspect its code, and try the same order again. Walk to the book stand to read the Python rule book. You can use your detective bag at any station.</li><li>Try all three customer orders and reply to the owner’s two questions. Your matching receipts and replies go into the case report.</li><li>Open the case folder to download your program and PDF report for Google Classroom.</li></ol><p>Python can stop at its first error, so one run may not reveal all five bugs. Placing a card or code piece does not check an answer.</p><p>Need to learn the controls? Close this panel and select <strong>Practice the controls</strong>. That example is ungraded and separate.</p>`, byId('game-menu')); });
@@ -667,14 +703,23 @@ byId('restore').addEventListener('change', async event => {
   if (!file || running || conflict) return;
   try {
     if (file.size > 25000000) throw new Error('This backup is too large. Choose a case backup below 25 MB.');
-    const restored = validateAttempt(JSON.parse(await file.text()), mode);
+    const original = attempt;
+    const originalMode = mode;
+    const originalSaveId = attempt.saveId;
+    const originalStored = localStorage.getItem(storageKey(mode));
+    const restored = validateAttempt(JSON.parse(await file.text()), originalMode);
+    const changed = () => original !== attempt || originalMode !== mode || originalSaveId !== attempt.saveId ||
+      running || conflict || localStorage.getItem(storageKey(originalMode)) !== originalStored;
+    if (changed()) throw new Error('The case changed while the backup was opening. Review the current work before restoring.');
     if (!confirm('Replace this attempt with the backup? Download a backup of your current work first if you need to keep it.')) return;
+    if (changed()) throw new Error('The case changed before restore. Review the current work before restoring.');
     if (damagedSave?.mode === mode) downloadBlob(new Blob([damagedSave.raw], { type: 'application/json' }), 'damaged_python_detective_save.json');
     else backup();
+    persistAttempt(restored, mode);
     damagedSave = null;
     settings.close();
     attempt = restored;
-    save(); refresh();
+    refresh();
     announce('Backup restored. Inspect the code, explanations, and run records before continuing.');
   } catch (error) { announce(`Restore failed: ${error.message}`); }
 });
@@ -758,7 +803,6 @@ byId('practice-keep').addEventListener('click', () => {
 });
 byId('practice-export').addEventListener('click', () => exportFiles(false));
 
-RULES.forEach(rule => { const item = document.createElement('li'); item.textContent = rule; byId('rules-list').append(item); });
 refresh();
 updateRunButtons();
 byId('save-status').textContent = attempt.saveId ? 'Restored saved work on this browser' : 'New local attempt. Changes will be saved here.';

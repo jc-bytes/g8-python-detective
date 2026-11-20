@@ -1,10 +1,10 @@
 import { playSound } from './sound.js';
 import { speak, finishSpeech } from './speech.js';
-import { tasks, stationRange } from './shop-tasks.js';
-import { openOrder, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun, requiredStation } from './task-scene.js';
+import { tasks } from './shop-tasks.js';
+import { openOrder, hasReadStationClue, judge, nextOrder, pendingQuestion, investigationGoal, currentOrderRun, requiredStation } from './task-scene.js';
 import { chapterIndex, createRuleBook } from './rule-book.js';
 import { setupWalk } from './shop-walk.js';
-import { inventory } from './backpack.js';
+import { carriedPieces, inventoryCount, renderInventory } from './backpack.js';
 import { paint } from './shop-art.js';
 
 const icon = (glyph, label) => '<span aria-hidden="true">'+glyph+'</span> '+label;
@@ -18,7 +18,7 @@ function illustrate(root) {
 
 export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, visit, openFolder}) {
   const room=id('shop-scene');
-  room.innerHTML='<div class="shop-heading"><section><h1 id="detective-name"></h1></section><div><button class="primary" id="start-order">Try the order</button></div></div><div id="shop-floor" tabindex="0" role="group" aria-label="Walk on the shop floor" aria-describedby="walk-guide" class="shop-stage"><div class="shop-world">'+art('shop',480,168)+
+  room.innerHTML='<div class="shop-heading"><section><h1 id="detective-name"></h1></section><div><button type="button" id="sprint-toggle" aria-pressed="false" title="Toggle sprint, or hold Shift while moving">Sprint <kbd aria-hidden="true">Shift</kbd></button><button class="primary" id="start-order">Try the order</button></div></div><div id="shop-floor" tabindex="0" role="group" aria-label="Walk on the shop floor" aria-describedby="walk-guide" class="shop-stage"><div class="shop-world">'+art('shop',480,168)+
     '<div data-station-id="owner" class="shop-owner">'+art('owner',36,60)+'</div><div class="shop-detective">'+art('detective',36,60)+'<button id="worn-bag" aria-label="Open carried satchel"></button></div>'+
 
     tasks.map(task=>`<div data-station-id="${task.id}" class="shop-prop shop-task" style="left:${task.center/480*100}%">${art(task.id,40,32)}<span>${task.title}</span></div>`).join('')+
@@ -44,25 +44,10 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   function bag(){
     playSound('handle_small_leather');
-    const attempt = getAttempt();
-    const current = currentOrderRun(attempt);
-    const last = current || attempt.runs.at(-1);
-    const station = requiredStation(attempt, current, nextOrder(attempt), pendingQuestion(attempt));
-    tool('Detective bag','<div class="bag-lining"><p></p><div id="strip-bag"></div></div>');
-    const message = tools.querySelector('p');
-    if (typeof last?.printed !== 'string') {
-      message.textContent = 'Try the order at the printer first. Then you’ll know which machine needs a piece.';
-      return;
-    }
-    const range = station && stationRange(attempt, station);
-    if (!range || judge(last, last.price, last.quantity)[0] === 'ok') {
-      message.textContent = id('shop-goal').textContent;
-      return;
-    }
-    const label = station === 'bracket' ? 'Printer' : tasks.find(task => task.id === station)?.title;
-    message.textContent = `${label} backpack. Place pieces at the machine.`;
-    const pieces = inventory(station, attempt.source.slice(...range), attempt.backpacks[station]);
-    id('strip-bag').textContent = pieces.length ? pieces.map(token => (token === '    ' ? '4 spaces' : token) + ' ×1').join(' · ') : '0 pieces left';
+    const remaining = carriedPieces(getAttempt());
+    tool('Detective bag','<div class="bag-lining"><p></p><div id="strip-bag" class="pack-pieces"></div></div>');
+    tools.querySelector('p').textContent = inventoryCount(remaining);
+    renderInventory(id('strip-bag'), remaining);
   }
   const hud=room.querySelector('.shop-hud');
   const home=hud.parentElement;
@@ -72,10 +57,10 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     hud.hidePopover();hud.removeAttribute('popover');home.append(hud);
     bagButton.onclick=()=>bag();
   }
-  function useBag(onChoose){
+  function useBag(){
     const dialog=id('work-dialog');
     hud.setAttribute('popover','manual');dialog.append(hud);hud.showPopover();
-    bagButton.onclick=()=>{playSound('handle_small_leather');onChoose();};
+    bagButton.onclick=bag;
   }
   let destination;
   function pointTo(station, chapter, returnStation) {
@@ -88,6 +73,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     refresh();
   }
   const readBook=createRuleBook({
+    assignedChapter:()=>destination?.station === 'book' ? destination.chapter : null,
     page:()=>destination?.station === 'book' ? -1 : getAttempt().printer.page,
     remember:index=>{
       if (!canEdit()) return;
@@ -108,15 +94,15 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     ['conversion','Input terminal',['See the screen and keyboard? That’s the input terminal.','I type the price of one notebook here.','Then I enter how many the customer wants.']],
     ['operator','Calculator',['See the yellow keys? That’s my calculator.','It uses the price and quantity to work out the total.']],
     ['name','Ledger',['The red book on the counter is my ledger.','It holds the total for the receipt.']],
-    ['indent','Order notice',['That sign on the wooden stand is the order notice.','It tells the till when to put “Order recorded” on a receipt.']],
-    ['printer','Printer',['See the paper sticking up? That’s the receipt printer.','The last line usually says “Debug check complete”.','This morning, no receipt came out.']],
+    ['indent','Order notice',['That sign on the wooden stand is the order notice.','It tells the printer when to add a line to the receipt.']],
+    ['printer','Printer',['See the paper sticking up? That’s the receipt printer.','The receipt comes out here.','This morning, no receipt came out.']],
     ['book','Rule book',['The open book on the stand is my Python rule book.','I look here when I forget how to write some code.','You can look things up here while you investigate.']]
   ];
   const firstStop='Walk with me. I’ll show you how an order moves through the shop.';
   const nextStopLines=[
     'Now let’s check the calculator. What does it do with those two numbers?',
     'Let’s look in the ledger to see where the total is kept.',
-    'Next, let’s read the order notice. When should a receipt say “Order recorded”?',
+    'Next, let’s look at the order notice.',
     'Let’s go to the printer and see where the receipt comes out.',
     'Let’s look at the rule book. I use it when I need help with Python.',
     'Come back to the counter with me. Let’s try the customer’s order.'
@@ -126,7 +112,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   let currentAttempt,screen='',line='',pageIndex=0,stopIndex=0,repeatVisit=false,motion=0;
   function needsWelcome(){const a=getAttempt();return !a.printer.tourDone && !a.printer.replied && !a.runs.length && !a.revision;}
   function awaitingOwner(){const a=getAttempt();return needsWelcome() && !a.printer.metOwner && a.printer.tourStop<0;}
-  const walk=setupWalk(room,{ownerOnly:needsWelcome,canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu')closeConversation();}});
+  const walk=setupWalk(room,{ownerOnly:needsWelcome,canRead:()=>true,inspectTask,read:openBook,inspect:opener=>inspectTask('bracket',opener),talk:meetOwner,leaveOwner:()=>{if(screen==='greeting' || screen==='menu' || screen==='thanks')closeConversation();}});
   function show(which,text=''){
     screen=which;line=text;pageIndex=0;id('shop-intro').hidden=false;refresh();
     if(!room.hidden && screen!=='walking'){
@@ -166,6 +152,12 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   function meetOwner(){
     if(awaitingOwner() && canEdit()){getAttempt().printer.metOwner=true;save();}
+    const attempt = getAttempt();
+    if (!nextOrder(attempt) && !pendingQuestion(attempt)) {
+      show('thanks', 'Thank you for fixing my till, Detective!');
+      walk.focus();
+      return;
+    }
     show(needsWelcome()?'greeting':'menu');
   }
   async function travel(index,revisit){
@@ -189,17 +181,24 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
     if(opener===id('owner-order') || !opener?.isConnected)opener=id('start-order');
     if(station==='bracket')visit();
     destination = null;
-    openOrder(station,opener,{pointTo,getAttempt,canEdit,edit,save,refresh,openDialog,run,useBag,paint,openFolder});
+    openOrder(station,opener,{pointTo,getAttempt,canEdit,edit,save,refresh,openDialog,run,useBag,openBag:bag,paint,openFolder});
   }
   function refresh(){
     const a=getAttempt();
     walk.setCharacter(a.identity.character);
-    if(a!==currentAttempt){destination=a.printer.destination;currentAttempt=a;++motion;walk.reset();line='';screen=needsWelcome()?'arrival':'';id('shop-intro').hidden=!screen;}
     const last=currentOrderRun(a);
+    if(a!==currentAttempt){
+      destination=a.printer.destination;
+      // An older save may have sent the detective to the book before they saw their station clue.
+      if (destination?.station === 'book' && destination.revision === a.revision && last && !last.backpackRetry &&
+          destination.returnStation && judge(last,last.price,last.quantity)[0] === destination.returnStation &&
+          !hasReadStationClue(last, destination.returnStation)) {
+        destination = {station:destination.returnStation, revision:a.revision};
+      }
+      currentAttempt=a;++motion;walk.reset();line='';screen=needsWelcome()?'arrival':'';id('shop-intro').hidden=!screen;
+    }
     const customer=nextOrder(a), question=pendingQuestion(a);
     const finished=!customer && !question;
-    const review=()=>openFolder(id('start-order'));
-    const order=closeConversation;
     const [number,taskTitle,taskHint]=investigationGoal(a,last,customer,question);
     let message=line,title=taskTitle,goal=taskHint;
     const touring=needsWelcome() || ['walking','stop','objects'].includes(screen);
@@ -242,8 +241,7 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
         }
         show('menu',clue);
       });
-      choice(finished?'Review case folder':last?'Continue order':'I’m ready to try the order',finished?review:order);
-      if(finished)goal='Review your case report.';
+      choice(last?'Continue order':'I’m ready to try the order',closeConversation);
     }
     if (destination && destination.revision !== a.revision) destination = null;
     const target = !touring && !finished && (destination?.station || requiredStation(a,last,customer,question));
@@ -254,20 +252,21 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
       prop.toggleAttribute('data-available', !touring && (marked || prop.dataset.stationId === 'book'));
       if (marked && destination) {
         const label = prop.querySelector('span').textContent;
-        goal = destination.chapter ? `Walk to the Rule book. Read “${destination.chapter}”.` : `Walk to the ${label}. Press Enter to inspect it.`;
-        title = destination.chapter ? 'Read the rule book' : `Next stop: ${label}`;
+        goal = `Walk to the ${label.toLowerCase()}.`;
+        title = label;
       }
     }
     id('detective-name').textContent='Detective '+a.identity.firstName.trim();id('quest-stage').textContent=touring?'The broken order':`Task ${number}`;id('quest-title').textContent=title;id('shop-goal').textContent=goal;
     const walking=screen==='walking';id('shop-floor').toggleAttribute('data-escorting',walking || screen==='stop' || screen==='objects' || screen==='assignment');
     const guiding=id('shop-floor').hasAttribute('data-escorting');
-    for(const control of ['worn-bag','room-bag','case-folder'])id(control).hidden=guiding || needsWelcome();
+    for(const control of ['worn-bag','case-folder'])id(control).hidden=guiding || needsWelcome();
     id('shop-intro').parentElement.hidden=walking;const pages=Array.isArray(message)?message:message.split(/(?<=[.!?])\s+(?=[A-Z])/);
     speak(id('owner-line'), pages[pageIndex] ?? pages[0]);
     id('shop-floor').toggleAttribute('data-arrival',screen==='arrival');
     const inConversation=Boolean(screen && screen!=='arrival' && !walking);
     const more=inConversation && pageIndex+1<pages.length;
     id('shop-floor').toggleAttribute('data-speaking',inConversation || walking);
+    id('sprint-toggle').hidden = inConversation || guiding;
     if(screen==='menu')choice('Back to investigation',closeConversation);
     if(screen==='assignment')choice('Start investigating',closeConversation);
     room.querySelector('.detective-choices').hidden=!inConversation || more || !choices.length;
@@ -278,5 +277,5 @@ export function setupPrinter({getAttempt, save, canEdit, edit, openDialog, run, 
   }
   id('case-folder').onclick=e=>openFolder(e.currentTarget);
   id('worn-bag').onclick=id('room-bag').onclick=()=>bag();
-  return {refresh,useBag,restoreBag,needsWelcome,inviteToTalk,walkToCounter:()=>walk.focus()};
+  return {refresh,openBag:bag,restoreBag,needsWelcome,inviteToTalk,walkToCounter:()=>walk.focus()};
 }

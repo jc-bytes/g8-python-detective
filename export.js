@@ -1,6 +1,6 @@
 import { paint } from './shop-art.js';
 import { tasks } from './shop-tasks.js';
-import { CASES, PRINTER_QUESTION, STARTER, TESTS, RULES, EXPLANATIONS, repairQuestions, repairLines, repairRow } from './case.js';
+import { CASES, PRINTER_QUESTION, receiptFor, receiptLines, TESTS, shopRules, explanationsFor, EXPLANATIONS, repairQuestionFor, repairQuestions, repairLines, repairRow } from './case.js';
 import { fileStem, keptRun } from './model.js';
 
 export function downloadBlob(blob, filename) {
@@ -25,7 +25,7 @@ export function caseDisposition(snapshot) {
   const verified = TESTS.every(test => {
     const run = keptRun(snapshot, test.id);
     const total = Number(test.price) * Number(test.quantity);
-    const expected = [`Total: ${total}`, ...(total ? ['Order recorded'] : []), 'Debug check complete'].join('\n');
+    const expected = receiptLines(receiptFor(snapshot), total, test.quantity).join('\n');
     return run?.source === snapshot.source && !run.error && (run.printed ?? run.stdout).trimEnd() === expected;
   });
   return verified ? 'Receipts verified' : 'Open investigation';
@@ -87,6 +87,7 @@ export function reportSections(snapshot) {
   const code = value => entry('code', value);
   const answer = (prompt, value, author = 'Student answer') => sections.at(-1).entries.push({kind:'answer', prompt, value, author});
   const assessment = snapshot.mode === 'assessment';
+  const receipt = receiptFor(snapshot);
   if (assessment) {
     heading('Statement of the store owner');
     entry('quote', '“A customer brought me three notebooks. Each one cost 6. The till gave me no receipt. I wrote one by hand for 18.”');
@@ -108,8 +109,8 @@ export function reportSections(snapshot) {
       else { note('The till produced this record.'); code(first.printed ?? first.stdout ?? ''); }
     }
     for (const repair of repairLines) {
-      const before = repairRow(STARTER, repair), after = repairRow(snapshot.source, repair);
-      const original = STARTER.split('\n')[before];
+      const before = repairRow(receipt.starter, repair), after = repairRow(snapshot.source, repair);
+      const original = receipt.starter.split('\n')[before];
       const revised = after === null ? null : snapshot.source.split('\n')[after];
       if (revised === original) continue;
       const subject = repair.id==='bracket'?'printer':repair.id;
@@ -121,31 +122,31 @@ export function reportSections(snapshot) {
     }
     if (caseDisposition(snapshot) === 'Receipts verified') {
       label('Game-generated receipt summary');
-      note('The repaired till printed 18 for the three notebooks, matching the owner’s handwritten receipt. A second purchase printed 10. With an empty order, the till printed 0 and left out “Order recorded”. The three receipts are filed together in Exhibit 01.');
+      note('The repaired till printed 18 for the three notebooks, matching the owner’s handwritten receipt. A second purchase printed 10. With an empty order, the till printed 0 and skipped the middle line. The three receipts are filed together in Exhibit 01.');
     }
     heading('Student answers');
-    for (const explanation of EXPLANATIONS) {
+    for (const explanation of explanationsFor(snapshot)) {
       label(explanation.title);
       const {id, questions} = explanation;
       const task = snapshot.tasks?.[id];
       const noteText = snapshot.notes[id];
       if (noteText?.trim()) {
         if (task?.completedReplies?.join('\n') === noteText) {
-          task.completedReplies.forEach((text,i) => answer(questions[i], text));
+          task.completedReplies.forEach((text,i) => answer(questions[i].prompt, text));
         } else {
           // Older saves and repair-desk responses store one statement for the topic.
           answer('', noteText, 'Student statement');
         }
       } else {
         const replies = task?.replies || [];
-        replies.forEach((text,i) => answer(questions[i], text));
+        replies.forEach((text,i) => answer(questions[i].prompt, text));
         if (!task?.draft?.trim()) note(replies.length ? 'Remaining answers pending.' : 'No student answer yet.');
       }
-      if (task?.draft?.trim()) answer(questions[task.replies.length], task.draft, 'Student draft · unsent');
+      if (task?.draft?.trim()) answer(questions[task.replies.length].prompt, task.draft, 'Student draft · unsent');
     }
-    for (const [id, question] of Object.entries(repairQuestions)) {
+    for (const id of Object.keys(repairQuestions)) {
       const reply = snapshot.repairReplies?.[id];
-      if (reply?.text) answer(question, reply.text, reply.sent ? 'Student answer' : 'Student draft · unsent');
+      if (reply?.text) answer(repairQuestionFor(id, reply.questionVersion, receipt).replaceAll('`', ''), reply.text, reply.sent ? 'Student answer' : 'Student draft · unsent');
     }
     if (snapshot.printer?.reply?.trim()) answer(PRINTER_QUESTION, snapshot.printer.reply, snapshot.printer.replied ? 'Student answer' : 'Student draft · unsent');
   }
@@ -162,8 +163,8 @@ export function reportSections(snapshot) {
   if (assessment) {
     heading('Exhibit 03 · Evidence recovered at the shop');
     label('Handwritten receipt'); code('3 notebooks × 6 = 18');
-    label('Program recovered from the printer'); code(STARTER);
-    label('Instructions posted at the shop'); RULES.forEach(note);
+    label('Program recovered from the printer'); code(receipt.starter);
+    label('Instructions posted at the shop'); shopRules(receipt).forEach(note);
     const objects = CASES.filter(item => snapshot.inspected.includes(item.id));
     if (objects.length) { label('Objects inspected'); note(objects.map(item => item.object).join(' · ')); }
     if (snapshot.printer?.visitedBook) note('Consulted the rule book.');
@@ -200,9 +201,24 @@ export function reportSections(snapshot) {
   return sections;
 }
 
-export function createReport(snapshot, filedAt = new Date()) {
+let pdfTools;
+function loadScript(file) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = new URL(file, import.meta.url).href;
+    script.onload = resolve;
+    script.onerror = () => { script.remove(); reject(new Error('The PDF tools could not load. Try the download again.')); };
+    document.head.append(script);
+  });
+}
+
+export async function createReport(snapshot, filedAt = new Date()) {
+  pdfTools ??= loadScript('./vendor/pdfmake.js').then(() => loadScript('./vendor/pdf-fonts.js')).catch(error => {
+    pdfTools = null;
+    throw error;
+  });
+  await pdfTools;
   const pdf = globalThis.pdfMake;
-  if (!pdf) throw new Error('The PDF library could not load. Reload the game and try again.');
   const title = snapshot.mode === 'practice' ? 'Practice investigation' : 'The Broken Order';
   const detective = [snapshot.identity.firstName, snapshot.identity.lastName].filter(Boolean).join(' ') || 'Name pending';
   const field = (name, value) => ({stack: [{text:name, font:'Mono', fontSize:8, color:'#665436'}, {text:value, bold:true, margin:[0,3,0,0]}]});
@@ -258,8 +274,12 @@ export function createReport(snapshot, filedAt = new Date()) {
     footer: (page, count) => ({columns: ['PYTHON DETECTIVE   /   CASE REPORT', {text: `${page} / ${count}`, alignment: 'right'}], margin: [44, 12], fontSize: 8, color: '#566963'}),
     pageBreakBefore: (node, after) => node.headlineLevel === 1 && after.length === 0};
   const fonts = {Serif:{bold:'DejaVuSerif-Bold.ttf', italics:'DejaVuSerif-Italic.ttf'}, Roboto: {normal: 'Roboto-Regular.ttf', bold: 'Roboto-Medium.ttf'}, Mono: {normal: 'DejaVuSansMono.ttf'}};
+  return pdfBlob(pdf.createPdf(definition, undefined, fonts));
+}
+
+export function pdfBlob(document) {
   return new Promise((resolve, reject) => {
-    const stream = pdf.createPdf(definition, undefined, fonts).getStream();
+    const stream = document.getStream();
     const chunks = [];
     stream.on('data', chunk => chunks.push(chunk));
     stream.on('error', reject);
@@ -268,8 +288,16 @@ export function createReport(snapshot, filedAt = new Date()) {
   });
 }
 
-export async function submissionFiles(attempt, filedAt = new Date()) {
+export function prepareSubmission(attempt, filedAt = new Date()) {
   const snapshot = structuredClone(attempt);
   const stem = `${snapshot.mode === 'practice' ? 'PRACTICE_' : ''}${fileStem(snapshot)}_${filedAt.toLocaleDateString('sv-SE', {timeZone:schoolZone})}`;
-  return { snapshot, stem, python: new Blob([snapshot.source], { type: 'text/x-python;charset=utf-8' }), report: await createReport(snapshot, filedAt) };
+  let download;
+  async function downloadPdf() {
+    const [blob, view] = await Promise.all([createReport(snapshot, filedAt), import('./report-view.js')]);
+    return view.imagePageReport(blob);
+  }
+  return {
+    stem, python:new Blob([snapshot.source], {type:'text/x-python;charset=utf-8'}),
+    report:() => download ??= downloadPdf().catch(error => { download = null; throw error; })
+  };
 }

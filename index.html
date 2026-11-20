@@ -10,8 +10,6 @@
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./printer.css">
   <link rel="stylesheet" href="./syntax.css">
-  <script defer src="./vendor/pdfmake.js"></script>
-  <script defer src="./vendor/pdf-fonts.js"></script>
   <script type="module" src="./app.js"></script>
 </head>
 <body>
@@ -84,7 +82,7 @@
       <section aria-labelledby="menu-investigation"><h3 id="menu-investigation">Investigation</h3>
         <div class="menu-routes">
           <button id="menu-export"><span>Open case folder</span><small>Read the report and download the till code</small></button>
-          <button id="other-objects">Case materials</button><button id="help-open">How to investigate</button>
+          <button id="menu-inventory">Backpack</button><button id="other-objects">Case materials</button><button id="help-open">How to investigate</button>
           <button type="button" id="sound-toggle">Sound effects</button><button id="edit-identity">Detective details</button><button id="practice-mode">Practice the controls</button>
         </div>
       </section>
@@ -95,7 +93,7 @@
       <footer><button id="clear-data">Clear this device's work</button></footer>
     </div>
   </dialog>
-  <dialog id="work-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><div><p id="dialog-eyebrow" class="eyebrow"></p><h2 id="dialog-title"></h2></div><button id="dialog-close" class="close-button" aria-label="Close investigation panel">✕</button></div><div id="dialog-body"></div></dialog>
+  <dialog id="work-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><div><p id="dialog-eyebrow" class="eyebrow"></p><h2 id="dialog-title"></h2></div><button id="dialog-inventory" type="button">Backpack</button><button id="dialog-close" class="close-button" aria-label="Close investigation panel">✕</button></div><div id="dialog-body"></div></dialog>
   <noscript><p class="warning">This activity needs JavaScript. Ask your teacher for the existing IDLE starter and Word response sheet.</p></noscript>
 </body>
 </html>

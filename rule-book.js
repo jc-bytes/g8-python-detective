@@ -2,12 +2,21 @@ import { colorCode } from './backpack.js';
 import { playSound } from './sound.js';
 export const ruleTopics = { bracket: 'Function calls', name: 'Names', conversion: 'Input values', operator: 'Calculations', indent: 'Conditions' };
 
+// Mark the pieces added around the original input call.
+const inputExample = [
+  ['age = '], ['int(', true], ['input("Age: ")'], [')', true], ['\nprint(age + 1)'],
+];
+
+const calculationExample = [
+  ['hours = 3\nminutes = hours '], ['*', true], [' 60\nprint(minutes)'],
+];
+
 const pages = [
-  ['Function calls','Every opening ( in a function call needs a closing ). Quotation marks enclose the words to print.','print("Lantern lit")','The quote ends the message. The last ) ends the call.'],
+  ['Function calls','<strong class="repair-rule">Every opening <code>(</code> needs a matching <code>)</code>.</strong> Quotation marks enclose the words to print.','print("Lantern lit")','The quote ends the message. The last ) ends the call.'],
   ['Names','Python looks up a name exactly as you wrote it. Compare the spelling where you store a value and where you use it.','shelf = "Blue"\nprint(shelf)','shelf and shel are different names. Only shelf has a value here.'],
-  ['Input values','Even when you type digits, input() gives you text. Use int() to turn whole-number text into a number for math.','age = int(input("Age: "))\nprint(age + 1)','Type 12. The inner call reads “12”, the outer call makes it 12, and the next line prints 13.'],
-  ['Calculations','Use * for equal groups. Use + to add separate amounts, - to subtract and / to divide.','hours = 3\nminutes = hours * 60\nprint(minutes)','Three hours means three groups of 60 minutes. This prints 180.'],
-  ['Conditions','An if tests whether something is true. Start its next line four spaces in. Python runs that line only when the test is true. A line back at the left edge runs either way.','rain = 0\nif rain > 0:\n    print("Bring boots")\nprint("Time to go")','When rain is 0, rain > 0 is false. Only “Time to go” prints. When rain is 2, both messages print.']
+  ['Input values','<strong class="repair-rule">Wrap <code>input()</code> in <code>int()</code> to get a whole number.</strong> On its own, <code>input()</code> gives you text.',inputExample,'Type 12. input() reads the text “12”. int() turns it into the number 12, so the next line prints 13.'],
+  ['Calculations','<strong class="repair-rule">Use <code>*</code> to multiply equal groups.</strong> Use + to add separate amounts, - to subtract and / to divide.',calculationExample,'Three hours means three groups of 60 minutes. This prints 180.'],
+  ['Conditions','A condition is a test. An <code class="py-keyword">if</code> checks whether the condition is true or false. <strong class="indent-rule">Start the next line with four spaces.</strong> Python runs that line only when the test is true. A line back at the left edge runs either way.','rain = 0\nif rain > 0:\n    print("Bring boots")\nprint("Time to go")','When rain is 0, rain > 0 is false. Only “Time to go” prints. When rain is 2, both messages print.']
 ];
 
 // Ink drawings for the flyleaf and the five examples, all in the same print palette.
@@ -73,9 +82,12 @@ function sketch(canvas,index) {
 
 export function chapterIndex(topic) { return pages.findIndex(([title]) => title === topic); }
 
-export function chapterExample(topic) { return pages[chapterIndex(topic)]?.[2]; }
+export function chapterExample(topic) {
+  const source = pages[chapterIndex(topic)]?.[2];
+  return Array.isArray(source) ? source.map(([text]) => text).join('') : source;
+}
 
-export function createRuleBook({page,remember}) {
+export function createRuleBook({page,remember,assignedChapter}) {
   const dialog=document.createElement('dialog');
   dialog.className='bound-book';
   dialog.setAttribute('aria-label','Python rule book');
@@ -114,8 +126,11 @@ export function createRuleBook({page,remember}) {
     right.replaceChildren();
     if(contents){
       right.innerHTML='<h3>Contents</h3><nav aria-label="Rule book chapters"></nav>';
+      const topic = assignedChapter();
+      if (topic) right.querySelector('h3').textContent = `Open “${topic}”.`;
       pages.forEach(([title],i)=>{
         const button=document.createElement('button');
+        button.classList.toggle('assigned-chapter', title === topic);
         button.textContent=title;
         const folio=document.createElement('span');
         folio.setAttribute('aria-hidden','true');
@@ -125,9 +140,19 @@ export function createRuleBook({page,remember}) {
         right.querySelector('nav').append(button);
       });
     }else{
-      const rule=document.createElement('p');rule.textContent=pages[index][1];left.append(rule);
+      const rule=document.createElement('p');rule.innerHTML=pages[index][1];left.append(rule);
       right.innerHTML='<h3>Python example</h3><pre><code></code></pre><p class="ink-note"></p>';
-      colorCode(right.querySelector('code'),pages[index][2]);
+      const example = right.querySelector('code');
+      if (pages[index][0] === ruleTopics.bracket) example.className = 'parenthesis-example';
+      const source = pages[index][2];
+      if (Array.isArray(source)) {
+        for (const [text, highlighted] of source) {
+          const part = document.createElement(highlighted ? 'mark' : 'span');
+          if (highlighted) part.textContent = text;
+          else colorCode(part, text);
+          example.append(part);
+        }
+      } else colorCode(example, source);
       right.querySelector('.ink-note').textContent=pages[index][3];
       left.dataset.folio=String(2+index*2);
       right.dataset.folio=String(3+index*2);
@@ -169,6 +194,7 @@ export function createRuleBook({page,remember}) {
       sheet.append(front);
       transition.append(sheet);
     }
+    const reachedChapter = pages[index]?.[0] === assignedChapter() && index >= 0;
     remember(index);turn(index);announcement.textContent=index===-1?'Contents':pages[index][0];dialog.scrollTop=0;
     if(animate){
       const direction=forward?-1:1;
@@ -191,7 +217,11 @@ export function createRuleBook({page,remember}) {
       sheet.animate(frames,{duration:compact?300:540,easing:'cubic-bezier(.42,0,.22,1)',fill:'forwards'}).onfinish=()=>layer.remove();
     }
 
-    if(![previous,next].includes(document.activeElement) || document.activeElement.disabled)
+    if (reachedChapter) {
+      const title = left.querySelector('h2');
+      title.tabIndex = -1;
+      title.focus({preventScroll:true});
+    } else if(![previous,next].includes(document.activeElement) || document.activeElement.disabled)
       (forward&&!next.disabled?next:!previous.disabled?previous:next).focus({preventScroll:true});
   }
   return opener=>{

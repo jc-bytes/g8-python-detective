@@ -1,7 +1,7 @@
 import { STARTER } from './case.js';
 
-export const originalPrinterLine = STARTER.trimEnd().split('\n').at(-1);
-export function printerState(source) {
+export function printerState(source, starter = STARTER) {
+  const originalPrinterLine = starter.trimEnd().split('\n').at(-1);
   const start = source.indexOf(originalPrinterLine);
   const unique = start >= 0 && source.indexOf(originalPrinterLine, start + 1) < 0
     && (start === 0 || source[start - 1] === '\n')
@@ -30,8 +30,8 @@ export function remapPrinter(state, before, after) {
   state.range = candidate && after.indexOf(candidate) === after.lastIndexOf(candidate) ? range : null;
 }
 
-export function restorePrinter(value, source) {
-  const clean = printerState(source);
+export function restorePrinter(value, source, starter = STARTER) {
+  const clean = printerState(source, starter);
   if (!value || typeof value !== 'object') return clean;
   const r = value.range;
   clean.range = Array.isArray(r) && r.length===2 && r.every(Number.isSafeInteger) && r[0]>=0 && r[0]<=r[1] && r[1]<=source.length ? r : null;

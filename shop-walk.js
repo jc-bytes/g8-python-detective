@@ -4,7 +4,8 @@ import { counter, paint, strideLength } from './shop-art.js';
 
 // The player's position is the midpoint between the shoes, in background pixels.
 // Stop the shoes just in front of the furniture footprint.
-const walkSpeed=.048; // Background pixels per millisecond.
+const walkSpeed = .060; // Background pixels per millisecond.
+const sprintMultiplier = 1.75;
 const counterEdge = counter.left - 13;
 const counterStop = counter.base + 4;
 const wallStop = 115;
@@ -28,6 +29,18 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
   let route=[], destination=null;
   let conversationAction=null;
   const held=new Map();
+  const sprintButton = room.querySelector('#sprint-toggle');
+  let sprintToggled = false, shiftHeld = false;
+  const pace = () => sprintToggled || shiftHeld ? sprintMultiplier : 1;
+  function updateSprint() {
+    sprintButton.setAttribute('aria-pressed', String(sprintToggled));
+    sprintButton.toggleAttribute('data-sprinting', sprintToggled || shiftHeld);
+  }
+  sprintButton.onclick = () => {
+    sprintToggled = !sprintToggled;
+    updateSprint();
+    stage.focus({preventScroll:true});
+  };
   const handlers={book:read,printer:inspect,owner:talk};
   function availableStation(station){
     if(ownerOnly())return station.id==='owner';
@@ -89,7 +102,7 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
   function tick(time){
     if(room.hidden || document.querySelector('dialog[open]')){stop();return;}
     const [tx,ty]=route[0], dx=tx-x,dy=ty-y,dist=Math.hypot(dx,dy);
-    const speed=reduced.matches?dist:Math.min(40,time-(last||time-16))*walkSpeed;
+    const speed=reduced.matches?dist:Math.min(40,time-(last||time-16))*walkSpeed*pace();
     last=time;
     const fraction=dist?Math.min(1,speed/dist):1;
     if(dist>0)facing=Math.abs(dx)>Math.abs(dy)?(dx<0?'left':'right'):(dy<0?'back':'front');
@@ -133,7 +146,7 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
   function manualTick(time){
     if(room.hidden || document.querySelector('dialog[open]') || !held.size){stop();return;}
     const [dx,dy]=Array.from(held.values()).at(-1);
-    move(dx,dy,Math.min(40,time-(last||time))*walkSpeed);
+    move(dx,dy,Math.min(40,time-(last||time))*walkSpeed*pace());
     last=time;
     frame=requestAnimationFrame(manualTick);
   }
@@ -149,13 +162,21 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
   document.addEventListener('keydown',event=>{
     if((stage.hasAttribute('data-escorting') && !(conversationAction && event.key==='Enter')) || room.hidden || document.querySelector('dialog[open]') || event.altKey || event.metaKey || event.ctrlKey ||
        ![document.body,stage,action].includes(event.target))return;
-    const direction=Object.hasOwn(keys,event.key) && keys[event.key];
+    if (event.key === 'Shift') {
+      shiftHeld = true;
+      updateSprint();
+      return;
+    }
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const direction=Object.hasOwn(keys,key) && keys[key];
     if(direction){
       event.preventDefault();stage.focus({preventScroll:true});
       if(event.repeat && !reduced.matches)return;
       if(!held.size)stop();
-      held.set(event.key,direction);
-      move(...direction,reduced.matches?12:4);
+      shiftHeld = event.shiftKey;
+      updateSprint();
+      held.set(key,direction);
+      move(...direction,(reduced.matches ? 15 : 5) * pace());
       if(!reduced.matches && !frame)frame=requestAnimationFrame(manualTick);
     }else if(event.key==='Enter' || event.key===' ' || (near?.key==='R' && event.key.toLowerCase()==='r')){
       event.preventDefault();
@@ -164,12 +185,23 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
     }
   });
   document.addEventListener('keyup',event=>{
-    if(held.delete(event.key) && !held.size)stop();
+    if (event.key === 'Shift') {
+      shiftHeld = event.shiftKey;
+      updateSprint();
+    }
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if(held.delete(key) && !held.size)stop();
   });
   stage.addEventListener('blur',()=>{if(held.size)stop();});
-  window.addEventListener('blur',stop);
+  window.addEventListener('blur', () => {
+    shiftHeld = false;
+    updateSprint();
+    stop();
+  });
   stage.addEventListener('click',event=>{
     if(stage.hasAttribute('data-escorting') || event.target.closest('button,.shop-talk,.detective-choices'))return;
+    shiftHeld = event.shiftKey;
+    updateSprint();
     const rect=floor.getBoundingClientRect(), scale=480/rect.width;
     const targetX=(event.clientX-rect.left)*scale, targetY=(event.clientY-rect.top)*scale;
     const prop=event.target.closest('[data-station-id]');
@@ -221,7 +253,7 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
       owner.style.left=((ownerX-18)/480*100)+'%';
       stage.style.setProperty('--speaker-x',(ownerX/480*100)+'%');
     }
-    const duration=Math.max(350,Math.min(2100,distance*9));
+    const duration=Math.max(280,Math.min(1680,distance*7.2));
     tourAnimations=[slide(player,from,duration),slide(owner,ownerFrom,duration)];
     const animations=tourAnimations;
     const started=performance.now(), ownerCanvas=owner.querySelector('canvas');
@@ -249,5 +281,5 @@ export function setupWalk(room,{ownerOnly,canRead,read,inspect,inspectTask,talk,
   },setConversationAction(label,advance){
     conversationAction=label?{label,key:'Enter',advance}:null;
     draw();
-  },refresh:()=>draw(),focus:()=>stage.focus(),reset:()=>{cancelTourMotion();home();x=67;y=157;near=null;lastStation=null;facing='right';stop();}};
+  },refresh:()=>draw(),focus:()=>stage.focus(),reset:()=>{sprintToggled=false;shiftHeld=false;updateSprint();cancelTourMotion();home();x=67;y=157;near=null;lastStation=null;facing='right';stop();}};
 }
